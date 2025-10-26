@@ -1,10 +1,12 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from app.models import GenerateRequest, GenerateResponse, RemixRequest
 from app.services import lyrics_service, song_service
 import os
 import glob
 import json
+from app.services.video_service import generate_lyric_video_from_files
+from app.utils import storage
 
 router = APIRouter()
 
@@ -344,3 +346,29 @@ def download_song(filename: str):
         if isinstance(e, HTTPException):
             raise e
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/generate-lyric-video")
+async def generate_lyric_video(
+    audio_file: UploadFile = File(...),
+    lyrics_file: UploadFile = File(None),
+    title: str = Form("song"),
+):
+    """
+    Generates a lyric video using WhisperX (lyrics optional).
+    """
+    try:
+        audio_bytes = await audio_file.read()
+        audio_name = storage.timestamped_filename(title, "mp3")
+        audio_path = storage.local_save_file(audio_bytes, audio_name)
+
+        lyrics_path = None
+        if lyrics_file:
+            lyrics_bytes = await lyrics_file.read()
+            lyrics_name = storage.timestamped_filename(title, "txt")
+            lyrics_path = storage.local_save_file(lyrics_bytes, lyrics_name)
+
+        result_path = generate_lyric_video_from_files(audio_path, lyrics_path, title)
+        return {"status": "success", "video_path": result_path}
+
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}

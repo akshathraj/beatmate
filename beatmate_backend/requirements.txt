@@ -4,3 +4,22 @@ requests
 pydantic
 python-dotenv
 google-genai
+numpy
+
+moviepy==1.0.3
+aeneas==1.7.3.0
+cython>=3.0.10
+pillow>=10.3.0
+imageio>=2.34.0
+imageio-ffmpeg>=0.5.1
+scipy>=1.12.0
+
+# ---- Utilities & Helpers ----
+tqdm>=4.66.4
+typing-extensions>=4.12.2
+aiofiles>=23.2.1
+python-multipart==0.0.9
+
+# ---- Optional (development tools) ----
+jinja2>=3.1.4
+httpx>=0.27.2
