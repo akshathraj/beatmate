@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    /* Music AI Dashboard Theme - Dark First */
+    --background: 220 26% 6%;
+    --foreground: 210 20% 98%;
+
+    --card: 220 20% 10%;
+    --card-foreground: 210 20% 98%;
+
+    --popover: 220 20% 10%;
+    --popover-foreground: 210 20% 98%;
+
+    /* Blue Green Teal Theme */
+    --primary: 180 100% 70%;
+    --primary-foreground: 220 26% 6%;
+
+    --secondary: 220 15% 15%;
+    --secondary-foreground: 210 20% 98%;
+
+    --muted: 220 15% 12%;
+    --muted-foreground: 215 16% 65%;
+
+    --accent: 180 100% 70%;
+    --accent-foreground: 220 26% 6%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 20% 98%;
+
+    --border: 220 15% 18%;
+    --input: 220 15% 15%;
+    --ring: 180 100% 70%;
+
+    --radius: 0.75rem;
+
+    /* AI Generation Colors */
+    --ai-primary: 180 100% 70%;
+    --ai-secondary: 160 100% 65%;
+    --ai-glow: 180 100% 70%;
+
+    /* Collaboration Colors */
+    --collab-primary: 200 100% 60%;
+    --collab-secondary: 220 100% 70%;
+
+    /* My Songs Colors */
+    --songs-primary: 140 60% 50%;
+    --songs-secondary: 160 60% 55%;
+
+    /* Gradients */
+    --gradient-ai: linear-gradient(135deg, hsl(180 100% 70%), hsl(160 100% 65%));
+    --gradient-collab: linear-gradient(135deg, hsl(200 100% 60%), hsl(220 100% 70%));
+    --gradient-songs: linear-gradient(135deg, hsl(140 60% 50%), hsl(160 60% 55%));
+    --gradient-bg: linear-gradient(135deg, hsl(220 26% 6%), hsl(220 20% 8%));
+
+    /* Shadows and Glows */
+    --shadow-glow: 0 0 30px hsl(var(--ai-glow) / 0.3);
+    --shadow-card: 0 8px 32px hsl(220 26% 3% / 0.8);
+    --shadow-intense: 0 0 50px hsl(var(--ai-glow) / 0.5);
+
+    /* Animations */
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-bounce: all 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
