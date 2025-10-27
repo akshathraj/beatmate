@@ -3,8 +3,8 @@ import torch
 
 def align_audio_with_lyrics(audio_path, lyrics_txt_path=None):
     """
-    Align lyrics with audio using WhisperX.
-    Returns list of {"start": float, "end": float, "text": "..."}.
+    Align lyrics with audio using WhisperX - WORD-LEVEL timestamps.
+    Returns list of {"start": float, "end": float, "word": "..."}.
     lyrics_txt_path is optional (for future guided alignment).
     """
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -18,19 +18,26 @@ def align_audio_with_lyrics(audio_path, lyrics_txt_path=None):
     print("[WhisperX] Transcribing audio...")
     result = model.transcribe(audio)
 
-    # Step 2: Alignment
+    # Step 2: Word-level Alignment
     print("[WhisperX] Aligning words to timestamps...")
     align_model, metadata = whisperx.load_align_model(language_code=result["language"], device=device)
     result_aligned = whisperx.align(result["segments"], align_model, metadata, audio, device)
 
-    fragments = []
+    # Extract WORD-level timestamps
+    word_fragments = []
     for seg in result_aligned["segments"]:
-        text = seg.get("text", "").strip()
-        if not text:
-            continue
-        start = float(seg["start"])
-        end = float(seg["end"])
-        fragments.append({"start": start, "end": end, "text": text})
+        words = seg.get("words", [])
+        for word_obj in words:
+            word_text = word_obj.get("word", "").strip()
+            if not word_text:
+                continue
+            start = float(word_obj.get("start", 0))
+            end = float(word_obj.get("end", start + 0.5))
+            word_fragments.append({
+                "start": start,
+                "end": end,
+                "word": word_text
+            })
 
-    print(f"[WhisperX] Found {len(fragments)} aligned lyric segments.")
-    return fragments
+    print(f"[WhisperX] Found {len(word_fragments)} word-level timestamps.")
+    return word_fragments
