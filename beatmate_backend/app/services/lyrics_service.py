@@ -1,9 +1,26 @@
 from google import genai
 from app import config
+import re
 
 # Initialize Gemini client once
 # client = genai.Client(api_key="AIzaSyCVox8noLLQQOgokVscwkaMmQ4t6F7r-DA")
 client = genai.Client(api_key=config.GEMINI_API_KEY)
+
+
+def clean_lyrics(lyrics: str) -> str:
+    """
+    Remove markdown code block artifacts from Gemini output.
+    """
+    # Remove code block markers (```)
+    lyrics = lyrics.replace('```', '')
+    
+    # Clean up any extra blank lines
+    lyrics = re.sub(r'\n{3,}', '\n\n', lyrics)
+    
+    # Strip leading/trailing whitespace
+    lyrics = lyrics.strip()
+    
+    return lyrics
 
 def generate_complete_lyrics(lyrics_snippet: str, genre: str) -> str:
     """
@@ -18,6 +35,8 @@ Requirements:
 - Add coherent rhymes, rhythm, and imagery that match the user's theme
 - Keep language natural and performance-ready; no explanations or metadata
 - Return only the lyrics with newline (\\n) separators
+- DO NOT use markdown formatting (no ```, no **, no #, no *)
+- Output raw lyrics only, no code blocks or formatting
 
 Genre: {genre}
 User lyrics (must be preserved as anchors):
@@ -29,10 +48,11 @@ User lyrics (must be preserved as anchors):
         contents=prompt_text
     )
 
-    # Get the generated lyrics text
+    # Get the generated lyrics text and clean any markdown artifacts
     lyrics = response.text.strip()
+    lyrics = clean_lyrics(lyrics)
 
-     # Debug log
+    # Debug log
     print("=== Gemini Generated Lyrics ===")
     print(lyrics)
 
@@ -94,6 +114,8 @@ def mashup_lyrics(lyrics_a: str, lyrics_b: str, genre: str = "Pop", title: str =
    - One line per lyric line
    - No explanations, just the lyrics
    - Performance-ready output
+   - DO NOT use markdown formatting (no ```, no **, no #, no *)
+   - Output raw lyrics only, no code blocks or formatting
 
 Create a mashup that feels professional, creative, and emotionally resonant!
 """
@@ -103,7 +125,9 @@ Create a mashup that feels professional, creative, and emotionally resonant!
         contents=prompt_text
     )
     
+    # Get mashup text and clean any markdown artifacts
     mashup = response.text.strip()
+    mashup = clean_lyrics(mashup)
     
     # Debug log
     print("=== Gemini Generated Mashup ===")
