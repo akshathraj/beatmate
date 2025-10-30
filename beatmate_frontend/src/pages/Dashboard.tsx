@@ -1,6 +1,7 @@
-import { AIGenerator } from "@/components/AIGenerator";
-import { RecentSongs } from "@/components/RecentSongs";
-import { RemixStudio } from "@/components/Collaboration";
+import { AIGenerator } from "@/components/dashboard/AIGenerator";
+import { RecentSongs } from "@/components/dashboard/RecentSongs";
+import { RemixStudio } from "@/components/dashboard/Collaboration";
+import { NavigationMenu } from "@/components/Navigation";
 import musicBg from "@/assets/music-bg.jpg";
 
 const Dashboard = () => {
@@ -20,12 +21,13 @@ const Dashboard = () => {
       
       {/* Content */}
       <div className="relative z-10">
-        {/* Header */}
+        {/* Header with Hamburger Menu */}
         <header className="p-3 border-b border-border/20 backdrop-blur-sm">
-          <div className="max-w-7xl mx-auto">
+          <div className="max-w-7xl mx-auto flex items-center justify-between">
             <h1 className="text-3xl font-extrabold bg-gradient-ai bg-clip-text text-transparent tracking-tight">
               BeatMate Studio
             </h1>
+            <NavigationMenu />
           </div>
         </header>
 
