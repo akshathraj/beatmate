@@ -18,7 +18,7 @@ const voiceOptions = [
   { value: "duet", label: "Duet", icon: Users, description: "Male & Female duet" }
 ];
 
-export const AIGenerator = () => {
+export const SongGenerator = () => {
   const [lyrics, setLyrics] = useState("");
   const [genre, setGenre] = useState("");
   const [title, setTitle] = useState("");
@@ -276,7 +276,7 @@ export const AIGenerator = () => {
             <Wand2 className="w-6 h-6 text-primary-foreground" />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-foreground">AI Music Generator</h2>
+            <h2 className="text-2xl font-bold text-foreground">AI Song Generator</h2>
             <p className="text-muted-foreground">Create songs with artificial intelligence</p>
           </div>
         </div>

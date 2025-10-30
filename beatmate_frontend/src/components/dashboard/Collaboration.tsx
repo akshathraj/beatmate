@@ -13,7 +13,7 @@ interface BackendSong {
   size: number;
 }
 
-export const RemixStudio = () => {
+export const RemixSongs = () => {
   const [songs, setSongs] = useState<BackendSong[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [songA, setSongA] = useState<string>("");
@@ -73,7 +73,7 @@ export const RemixStudio = () => {
         body: JSON.stringify({
           song_a: sA.filename,
           song_b: sB.filename,
-          title: (title || `lix ${(sA.title || sA.filename).replace('.mp3','')} x ${(sB.title || sB.filename).replace('.mp3','')}`).trim(),
+          title: (title || `${(sA.title || sA.filename).replace('.mp3','')} x ${(sB.title || sB.filename).replace('.mp3','')} Remix`).trim(),
           genre: 'Pop',
           voiceType: 'male'
         })
@@ -95,7 +95,7 @@ export const RemixStudio = () => {
       let attempts = 0;
       const intervalMs = 5000;
       const maxAttempts = 60;
-      const providedTitle = (title || `${(sA.title || sA.filename).replace('.mp3','')} x ${(sB.title || sB.filename).replace('.mp3','')}`).trim().toLowerCase();
+      const providedTitle = (title || `${(sA.title || sA.filename).replace('.mp3','')} x ${(sB.title || sB.filename).replace('.mp3','')} Remix`).trim().toLowerCase();
       const startCutoff = (requestStartEpoch || (Date.now() / 1000)) - 2;
       const poll = async () => {
         try {
@@ -210,21 +210,21 @@ export const RemixStudio = () => {
   };
 
   return (
-    <DashboardCard glowColor="collab" className="h-full w-full">
-      <div className="space-y-4">
+    <DashboardCard glowColor="collab" className="h-full w-full" compact>
+      <div className="space-y-3">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-gradient-collab rounded-lg">
             <Shuffle className="w-6 h-6 text-primary-foreground" />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-foreground">Remix Studio</h2>
+            <h2 className="text-2xl font-bold text-foreground">Remix Songs</h2>
             <p className="text-muted-foreground">Mix any two songs from your library</p>
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
-            <label className="text-sm text-foreground mb-2 block">Song A</label>
+            <label className="text-sm text-foreground mb-2 block">Song 1</label>
             <Select value={songA} onValueChange={setSongA}>
               <SelectTrigger className="bg-input/50 border-border/50">
                 <SelectValue placeholder={isLoading ? 'Loading...' : 'Select first song'} />
@@ -239,7 +239,7 @@ export const RemixStudio = () => {
             </Select>
           </div>
           <div>
-            <label className="text-sm text-foreground mb-2 block">Song B</label>
+            <label className="text-sm text-foreground mb-2 block">Song 2</label>
             <Select value={songB} onValueChange={setSongB}>
               <SelectTrigger className="bg-input/50 border-border/50">
                 <SelectValue placeholder={isLoading ? 'Loading...' : 'Select second song'} />
@@ -256,8 +256,8 @@ export const RemixStudio = () => {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button onClick={mixTwoSongs} variant="collab" size="sm" disabled={!songA || !songB}>
-            <Shuffle className="w-4 h-4" />
+          <Button onClick={mixTwoSongs} variant="collab" size="lg" className="w-full text-lg py-5" disabled={!songA || !songB}>
+            <Shuffle className="w-5 h-5" />
             Remix with AI
           </Button>
         </div>

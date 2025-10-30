@@ -1,6 +1,6 @@
-import { AIGenerator } from "@/components/dashboard/AIGenerator";
+import { SongGenerator } from "@/components/dashboard/SongGenerator";
 import { RecentSongs } from "@/components/dashboard/RecentSongs";
-import { RemixStudio } from "@/components/dashboard/Collaboration";
+import { RemixSongs } from "@/components/dashboard/RemixSongs";
 import { LyricVideoGenerator } from "@/components/dashboard/LyricVideoGenerator";
 import { NavigationMenu } from "@/components/Navigation";
 import musicBg from "@/assets/music-bg.jpg";
@@ -38,7 +38,7 @@ const Dashboard = () => {
             {/* Top Row - Equal Height */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-2">
               <div className="flex">
-                <AIGenerator />
+                <SongGenerator />
               </div>
               <div className="flex">
                 <LyricVideoGenerator />
@@ -48,7 +48,7 @@ const Dashboard = () => {
             {/* Bottom Row - Equal Height - Compact */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
               <div className="flex">
-                <RemixStudio />
+                <RemixSongs />
               </div>
               <div className="flex">
                 <RecentSongs />

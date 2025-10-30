@@ -154,13 +154,6 @@ export const LyricVideoGenerator = () => {
                       <Download className="w-4 h-4" />
                     </Button>
                   </div>
-                  
-                  {/* Status Badge */}
-                  <div className="absolute bottom-2 left-2">
-                    <div className="px-2 py-1 bg-green-500/90 text-white text-xs rounded">
-                      Ready to play
-                    </div>
-                  </div>
                 </>
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-secondary/20 to-muted/20">
@@ -211,6 +204,13 @@ export const LyricVideoGenerator = () => {
                   variant="hero"
                   size="lg"
                   className="w-full text-xl py-6"
+                  onClick={() => {
+                    // Auto-fill title with selected song filename (without .mp3 extension)
+                    if (selectedSong) {
+                      const songTitle = selectedSong.replace('.mp3', '');
+                      setTitle(songTitle);
+                    }
+                  }}
                 >
                   {isGenerating ? (
                     <>

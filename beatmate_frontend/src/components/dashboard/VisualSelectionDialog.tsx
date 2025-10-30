@@ -96,11 +96,6 @@ export const VisualSelectionDialog = ({ open, onOpenChange, onSelect }: VisualSe
                       </div>
                     </div>
                   )}
-
-                  {/* Filename Label */}
-                  <div className="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm px-2 py-1">
-                    <p className="text-xs text-white truncate">{bg.filename}</p>
-                  </div>
                 </button>
               ))}
 

@@ -5,9 +5,10 @@ interface DashboardCardProps {
   children: React.ReactNode;
   className?: string;
   glowColor?: "ai" | "collab" | "songs";
+  compact?: boolean;
 }
 
-export const DashboardCard = ({ children, className, glowColor }: DashboardCardProps) => {
+export const DashboardCard = ({ children, className, glowColor, compact }: DashboardCardProps) => {
   const glowClasses = {
     ai: "shadow-glow hover:shadow-intense",
     collab: "shadow-[0_0_30px_hsl(var(--collab-primary)/0.3)] hover:shadow-[0_0_50px_hsl(var(--collab-primary)/0.5)]",
@@ -22,7 +23,7 @@ export const DashboardCard = ({ children, className, glowColor }: DashboardCardP
         className
       )}
     >
-      <CardContent className="p-6">
+      <CardContent className={compact ? "p-4" : "p-6"}>
         {children}
       </CardContent>
     </Card>

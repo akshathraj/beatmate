@@ -121,7 +121,7 @@ async def musicgpt_webhook(request: Request):
             # Sanitize title for filesystem
             safe_title = storage.sanitize_title(title)
             base_filename = f"{safe_title}.mp3"
-            alt_filename = f"{safe_title}_1.mp3"
+            alt_filename = f"{safe_title}_ignore.mp3"
 
             songs_folder = storage.get_folder_path('songs')
             base_path = os.path.join(songs_folder, base_filename)
@@ -130,7 +130,7 @@ async def musicgpt_webhook(request: Request):
             r = requests.get(conversion_path)
             audio_bytes = r.content
 
-            # Decide which filename to use: first save -> base, second -> _1, else skip
+            # Decide which filename to use: first save -> base, second -> _ignore, else skip
             if not os.path.exists(base_path):
                 chosen_filename = base_filename
                 local_path = storage.local_save_file(audio_bytes, chosen_filename, folder_type='songs')
@@ -163,15 +163,18 @@ async def musicgpt_webhook(request: Request):
                     temp_path = os.path.join(files_dir, f"task_{task_id}.user.txt")
                     if os.path.exists(temp_path):
                         base_no_ext = os.path.splitext(os.path.basename(local_path))[0]
-                        lyrics_path = os.path.join(files_dir, f"{base_no_ext}.txt")
+                        lyrics_folder = storage.get_folder_path('lyrics')
+                        lyrics_path = os.path.join(lyrics_folder, f"{base_no_ext}.txt")
                         os.replace(temp_path, lyrics_path)
+                        print(f"✅ Promoted user lyrics to: {lyrics_path}")
                         # Cleanup meta files for this task and its conversions
                         meta_path = os.path.join(files_dir, f"task_{task_id}.meta.json")
                         try:
                             if os.path.exists(meta_path):
                                 os.remove(meta_path)
-                        except Exception:
-                            pass
+                                print(f"🗑️  Deleted task metadata: task_{task_id}.meta.json")
+                        except Exception as e:
+                            print(f"⚠️  Failed to delete task metadata: {e}")
                         # Remove conversion-indexed meta if present
                         try:
                             conv_id = payload.get('conversion_id') or ''
@@ -179,11 +182,13 @@ async def musicgpt_webhook(request: Request):
                                 conv_meta_path = os.path.join(files_dir, f"conv_{conv_id}.meta.json")
                                 if os.path.exists(conv_meta_path):
                                     os.remove(conv_meta_path)
-                        except Exception:
-                            pass
+                                    print(f"🗑️  Deleted conversion metadata: conv_{conv_id}.meta.json")
+                        except Exception as e:
+                            print(f"⚠️  Failed to delete conversion metadata: {e}")
             except Exception as le:
                 print(f"Could not promote user lyrics to final file: {le}")
-            # Try to save lyrics alongside the mp3 (for future remixing)
+            # Try to save lyrics to lyrics folder (for future remixing)
+            # Skip saving for _ignore variants to avoid duplicates
             try:
                 lyrics_text = payload.get("lyrics")
                 if not lyrics_text and payload.get("lyrics_timestamped"):
@@ -198,13 +203,19 @@ async def musicgpt_webhook(request: Request):
                     if isinstance(ts_list, list):
                         lyrics_text = "\n".join([item.get("text", "") for item in ts_list if isinstance(item, dict) and item.get("text")])
                 if lyrics_text:
-                    files_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'files')
                     base_no_ext = os.path.splitext(os.path.basename(local_path))[0]
-                    lyrics_path = os.path.join(files_dir, f"{base_no_ext}.txt")
-                    with open(lyrics_path, 'w', encoding='utf-8') as f:
-                        f.write(lyrics_text)
+                    
+                    # Skip saving lyrics for _ignore variants (they have same lyrics as primary)
+                    if not base_no_ext.endswith('_ignore'):
+                        lyrics_folder = storage.get_folder_path('lyrics')
+                        lyrics_path = os.path.join(lyrics_folder, f"{base_no_ext}.txt")
+                        with open(lyrics_path, 'w', encoding='utf-8') as f:
+                            f.write(lyrics_text)
+                        print(f"✅ Saved lyrics to: {lyrics_path}")
+                    else:
+                        print(f"⏭️  Skipped saving duplicate lyrics for _ignore variant")
             except Exception as le:
-                print(f"Could not save lyrics text: {le}")
+                print(f"⚠️ Could not save lyrics text: {le}")
         return {"success": True}
 
     except Exception as e:
@@ -216,17 +227,18 @@ async def musicgpt_webhook(request: Request):
 @router.post('/remix', response_model=GenerateResponse)
 def remix_songs(req: RemixRequest):
     try:
-        # Locate songs in files dir
-        files_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'files')
-        path_a = os.path.join(files_dir, req.song_a)
-        path_b = os.path.join(files_dir, req.song_b)
+        # Locate songs in songs folder
+        songs_folder = storage.get_folder_path('songs')
+        lyrics_folder = storage.get_folder_path('lyrics')
+        path_a = os.path.join(songs_folder, req.song_a)
+        path_b = os.path.join(songs_folder, req.song_b)
         if not os.path.exists(path_a) or not os.path.exists(path_b):
             raise HTTPException(status_code=404, detail="One or both songs not found")
 
-        # Try to load saved lyrics .txt next to mp3; fallback to filename as seed
+        # Try to load saved lyrics from lyrics folder; fallback to filename as seed
         def load_lyrics_for(fn: str) -> str:
             base = os.path.splitext(fn)[0]
-            txt_path = os.path.join(files_dir, f"{base}.txt")
+            txt_path = os.path.join(lyrics_folder, f"{base}.txt")
             if os.path.exists(txt_path):
                 try:
                     with open(txt_path, 'r', encoding='utf-8') as f:
@@ -238,73 +250,56 @@ def remix_songs(req: RemixRequest):
         lyrics_a = load_lyrics_for(req.song_a)
         lyrics_b = load_lyrics_for(req.song_b)
 
-        # Build a mashup that guarantees at least one verse and one chorus from EACH song
-        def parse_sections(text: str):
-            sections = {"verse": [], "chorus": [], "other": []}
-            current_label = None
-            current_buffer: list[str] = []
-
-            def flush():
-                nonlocal current_label, current_buffer
-                if not current_buffer:
-                    return
-                target = "other"
-                if current_label:
-                    lower = current_label.lower()
-                    if "chorus" in lower:
-                        target = "chorus"
-                    elif "verse" in lower:
-                        target = "verse"
-                sections[target].append(current_buffer)
-                current_buffer = []
-
-            for raw in text.splitlines():
-                line = raw.strip()
-                if not line:
-                    continue
-                if line.startswith("[") and line.endswith("]"):
-                    # new section label
-                    flush()
-                    current_label = line[1:-1]
-                else:
-                    current_buffer.append(line)
-            flush()
-            return sections
-
-        def fallback_lines(text: str, n: int) -> list[str]:
-            lines = [ln.strip() for ln in text.splitlines() if ln.strip() and not ln.strip().startswith('[')]
-            if not lines:
-                return [text.strip()]
-            return lines[:n]
-
-        sec_a = parse_sections(lyrics_a)
-        sec_b = parse_sections(lyrics_b)
-
-        a_verse = (sec_a["verse"][0] if sec_a["verse"] else fallback_lines(lyrics_a, 6))
-        a_chorus = (sec_a["chorus"][0] if sec_a["chorus"] else fallback_lines(lyrics_a, 4))
-        b_verse = (sec_b["verse"][0] if sec_b["verse"] else fallback_lines(lyrics_b, 6))
-        b_chorus = (sec_b["chorus"][0] if sec_b["chorus"] else fallback_lines(lyrics_b, 4))
-
-        mashup_lines: list[str] = []
-        mashup_lines.append("[Intro]")
-        mashup_lines.extend((a_verse[:2] if isinstance(a_verse, list) else a_verse))
-        mashup_lines.append("[Verse 1]")
-        mashup_lines.extend(a_verse if isinstance(a_verse, list) else [a_verse])
-        mashup_lines.append("[Chorus]")
-        mashup_lines.extend(a_chorus if isinstance(a_chorus, list) else [a_chorus])
-        mashup_lines.append("[Verse 2]")
-        mashup_lines.extend(b_verse if isinstance(b_verse, list) else [b_verse])
-        mashup_lines.append("[Chorus]")
-        mashup_lines.extend(b_chorus if isinstance(b_chorus, list) else [b_chorus])
-        mashup_lines.append("[Outro]")
-        # simple blended outro with last lines of both
-        mashup_lines.extend((a_chorus[-2:] if isinstance(a_chorus, list) else [str(a_chorus)])[:2])
-
-        mashup = "\n".join(mashup_lines)
+        # Use Gemini AI to create an intelligent, creative mashup
+        print(f"🎵 Creating intelligent mashup for: {req.title}")
+        print(f"   Song A: {req.song_a}")
+        print(f"   Song B: {req.song_b}")
+        print(f"   Genre: {req.genre}")
+        
+        mashup = lyrics_service.mashup_lyrics(
+            lyrics_a=lyrics_a,
+            lyrics_b=lyrics_b,
+            genre=req.genre,
+            title=req.title
+        )
+        
+        # Save mashup lyrics to lyrics folder
+        lyrics_folder = storage.get_folder_path('lyrics')
+        safe_title = storage.sanitize_title(req.title)
+        mashup_lyrics_path = os.path.join(lyrics_folder, f"{safe_title}.txt")
+        with open(mashup_lyrics_path, 'w', encoding='utf-8') as f:
+            f.write(mashup)
+        print(f"✅ Saved remix lyrics to: {mashup_lyrics_path}")
 
         music_task = song_service.generate_song_from_lyrics(
             mashup, req.genre, title=req.title, duration=60, voice_type=req.voiceType
         )
+        
+        # Save metadata so webhook can use the correct title
+        try:
+            files_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'files')
+            task_id = music_task.get('task_id')
+            if task_id:
+                # Save meta (title) so webhook can use user title instead of provider's
+                meta_path = os.path.join(files_dir, f"task_{task_id}.meta.json")
+                with open(meta_path, 'w', encoding='utf-8') as f:
+                    json.dump({
+                        "title": req.title,
+                        "complete_lyrics": mashup
+                    }, f)
+                print(f"✅ Saved remix metadata: {meta_path}")
+                
+                # Also index by conversion IDs so the webhook can resolve by either
+                conv1 = (music_task.get('conversion_id_1') or '').strip()
+                conv2 = (music_task.get('conversion_id_2') or '').strip()
+                if conv1:
+                    with open(os.path.join(files_dir, f"conv_{conv1}.meta.json"), 'w', encoding='utf-8') as f:
+                        json.dump({"title": req.title}, f)
+                if conv2:
+                    with open(os.path.join(files_dir, f"conv_{conv2}.meta.json"), 'w', encoding='utf-8') as f:
+                        json.dump({"title": req.title}, f)
+        except Exception as se:
+            print(f"⚠️ Could not save remix metadata: {se}")
 
         return GenerateResponse(
             song_url=f"MusicGPT task_id: {music_task['task_id']}",
@@ -337,8 +332,8 @@ def list_songs():
             created_ts = os.path.getmtime(file_path)
 
             base_no_ext = os.path.splitext(file_name)[0]
-            # Hide the '_1' alternate in UI by skipping it from listing
-            if base_no_ext.endswith('_1'):
+            # Hide the '_ignore' alternate in UI by skipping it from listing
+            if base_no_ext.endswith('_ignore'):
                 continue
             # Title is the base filename without extension
             title = base_no_ext
