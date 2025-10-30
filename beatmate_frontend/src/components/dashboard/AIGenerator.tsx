@@ -269,7 +269,7 @@ export const AIGenerator = () => {
   };
 
   return (
-    <DashboardCard glowColor="ai" className="h-full">
+    <DashboardCard glowColor="ai" className="h-full w-full">
       <div className="space-y-6">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-gradient-ai rounded-lg">
@@ -292,7 +292,7 @@ export const AIGenerator = () => {
 Example: 'A sad love ballad with piano and strings about lost memories'`}
               value={lyrics}
               onChange={(e) => setLyrics(e.target.value)}
-              className="min-h-[120px] bg-input/50 border-border/50 focus:border-ai-primary/50"
+              className="min-h-[260px] bg-input/50 border-border/50 focus:border-ai-primary/50"
             />
           </div>
 
@@ -395,71 +395,6 @@ Example: 'A sad love ballad with piano and strings about lost memories'`}
               </div>
             </DialogContent>
           </Dialog>
-
-          {(generatedSong || songUrl) && (
-            <div className="p-4 bg-card border border-border/50 rounded-lg space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-foreground">
-                  {title || "Generated Song"}
-                </h3>
-                {songUrl && (
-                  <div className="text-xs text-green-500">Ready to play</div>
-                )}
-              </div>
-              
-              <div className="flex items-center gap-3">
-                <Button
-                  onClick={togglePlayback}
-                  variant="ai"
-                  size="sm"
-                  disabled={!songUrl}
-                >
-                  {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                </Button>
-
-                {/* Wave visualization */}
-                <div className="flex-1">
-                  {songUrl ? (
-                    <div className="h-10 flex items-end gap-1">
-                      {waveHeights.map((h, i) => (
-                        <div key={i} className="w-1 bg-gradient-ai rounded-sm" style={{ height: isPlaying ? `${h}%` : '10%' }} />
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-sm text-muted-foreground">Processing... This may take a few minutes</div>
-                  )}
-                </div>
-                
-                <Button
-                  onClick={downloadSong}
-                  variant="outline"
-                  size="sm"
-                  disabled={!songUrl}
-                >
-                  <Download className="w-4 h-4" />
-                </Button>
-              </div>
-
-              {/* Progress time */}
-              {songUrl && (
-                <div className="text-xs text-muted-foreground">
-                  {Math.floor(currentTime / 60)}:{`${Math.floor(currentTime % 60)}`.padStart(2,'0')} / {Math.floor(duration / 60)}:{`${Math.floor(duration % 60)}`.padStart(2,'0')}
-                </div>
-              )}
-              
-              {songUrl && (
-                <audio
-                  ref={audioRef}
-                  src={songUrl}
-                  onTimeUpdate={(e) => setCurrentTime((e.target as HTMLAudioElement).currentTime)}
-                  onLoadedMetadata={(e) => setDuration((e.target as HTMLAudioElement).duration)}
-                  onEnded={() => setIsPlaying(false)}
-                  onPause={() => setIsPlaying(false)}
-                  onPlay={() => setIsPlaying(true)}
-                />
-              )}
-            </div>
-          )}
         </div>
       </div>
     </DashboardCard>

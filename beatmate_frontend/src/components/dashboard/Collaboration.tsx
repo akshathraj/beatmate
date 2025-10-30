@@ -210,7 +210,7 @@ export const RemixStudio = () => {
   };
 
   return (
-    <DashboardCard glowColor="collab" className="h-full">
+    <DashboardCard glowColor="collab" className="h-full w-full">
       <div className="space-y-4">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-gradient-collab rounded-lg">
@@ -260,23 +260,6 @@ export const RemixStudio = () => {
             <Shuffle className="w-4 h-4" />
             Remix with AI
           </Button>
-        </div>
-
-        <div className="space-y-2">
-          <h4 className="text-sm font-medium text-muted-foreground">Library</h4>
-          <div className="space-y-1 max-h-40 overflow-y-auto">
-            {songs.map((s) => (
-              <div key={s.filename} className="flex items-center justify-between p-2 bg-muted/10 rounded">
-                <div className="flex items-center gap-2">
-                  <Music className="w-4 h-4 text-collab-primary" />
-                  <span className="text-sm">{(s.title || s.filename).replace('.mp3','')}</span>
-                </div>
-                <Button asChild variant="ghost" size="sm">
-                  <a href={`http://localhost:8000${s.download_url}`} target="_blank" rel="noreferrer">Play</a>
-                </Button>
-              </div>
-            ))}
-          </div>
         </div>
 
       {/* Remix generation status and inline player */}

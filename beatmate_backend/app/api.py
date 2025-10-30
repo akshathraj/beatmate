@@ -14,8 +14,21 @@ router = APIRouter()
 @router.post('/generate-song', response_model=GenerateResponse)
 def generate_song(req: GenerateRequest):
     try:
-        # Complete lyrics
+        # Check if title already exists
+        if storage.check_title_exists(req.title or "song"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Title '{req.title}' already exists. Please choose a different title."
+            )
+        
+        # Complete lyrics using Gemini
         complete_lyrics = lyrics_service.generate_complete_lyrics(req.lyrics, req.genre)
+        
+        # Save generated lyrics immediately to lyrics folder
+        safe_title = storage.sanitize_title(req.title or "song")
+        lyrics_path = os.path.join(storage.get_folder_path('lyrics'), f"{safe_title}.txt")
+        with open(lyrics_path, 'w', encoding='utf-8') as f:
+            f.write(complete_lyrics)
 
         # Generate song (async task)
         music_task = song_service.generate_song_from_lyrics(
@@ -35,7 +48,8 @@ def generate_song(req: GenerateRequest):
                 meta_path = os.path.join(files_dir, f"task_{task_id}.meta.json")
                 with open(meta_path, 'w', encoding='utf-8') as f:
                     json.dump({
-                        "title": (req.title or "song")
+                        "title": (req.title or "song"),
+                        "complete_lyrics": complete_lyrics
                     }, f)
                 # Also index by conversion IDs so the webhook can resolve by either
                 conv1 = (music_task.get('conversion_id_1') or '').strip()
@@ -55,6 +69,8 @@ def generate_song(req: GenerateRequest):
             local_path=f"Conversion IDs: {music_task['conversion_id_1']}, {music_task['conversion_id_2']}"
         )
     except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -103,30 +119,41 @@ async def musicgpt_webhook(request: Request):
             from .utils import storage
 
             # Sanitize title for filesystem
-            safe_title = "".join(ch for ch in title if ch.isalnum() or ch in (' ', '-', '_', '&', '.' )).strip() or "song"
+            safe_title = storage.sanitize_title(title)
             base_filename = f"{safe_title}.mp3"
-            alt_filename = f"{safe_title}_(1).mp3"
+            alt_filename = f"{safe_title}_1.mp3"
 
-            files_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'files')
-            os.makedirs(files_dir, exist_ok=True)
-            base_path = os.path.join(files_dir, base_filename)
-            alt_path = os.path.join(files_dir, alt_filename)
+            songs_folder = storage.get_folder_path('songs')
+            base_path = os.path.join(songs_folder, base_filename)
+            alt_path = os.path.join(songs_folder, alt_filename)
 
             r = requests.get(conversion_path)
             audio_bytes = r.content
 
-            # Decide which filename to use: first save -> base, second -> _(1), else skip
+            # Decide which filename to use: first save -> base, second -> _1, else skip
             if not os.path.exists(base_path):
                 chosen_filename = base_filename
-                local_path = storage.local_save_file(audio_bytes, chosen_filename)
+                local_path = storage.local_save_file(audio_bytes, chosen_filename, folder_type='songs')
             elif not os.path.exists(alt_path):
                 chosen_filename = alt_filename
-                local_path = storage.local_save_file(audio_bytes, chosen_filename)
+                local_path = storage.local_save_file(audio_bytes, chosen_filename, folder_type='songs')
             else:
                 # Already saved both variants for this title; ignore extra
                 return {"success": True}
 
             print(f"Saved song locally: {local_path}")
+            
+            # Save album art if provided
+            try:
+                album_art_url = payload.get("album_art") or payload.get("image_url")
+                if album_art_url:
+                    art_response = requests.get(album_art_url)
+                    if art_response.status_code == 200:
+                        art_filename = f"{safe_title}.jpg"
+                        storage.local_save_file(art_response.content, art_filename, folder_type='album_art')
+                        print(f"Saved album art: {art_filename}")
+            except Exception as ae:
+                print(f"Could not save album art: {ae}")
 
             # If a temp user-lyrics file exists for this task, promote it to final .txt next to mp3
             try:
@@ -291,15 +318,17 @@ def remix_songs(req: RemixRequest):
 @router.get('/songs')
 def list_songs():
     """
-    Returns a list of all generated songs in the files directory, newest first.
-    Each item includes filename, derived title, size, created_at (timestamp), and download_url.
+    Returns a list of all generated songs in the songs folder, newest first.
+    Each item includes filename, derived title, size, created_at (timestamp), download_url, and album_art_url.
     """
     try:
-        files_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'files')
-        if not os.path.exists(files_dir):
+        songs_folder = storage.get_folder_path('songs')
+        album_art_folder = storage.get_folder_path('album_art')
+        
+        if not os.path.exists(songs_folder):
             return {"songs": []}
 
-        mp3_files = glob.glob(os.path.join(files_dir, '*.mp3'))
+        mp3_files = glob.glob(os.path.join(songs_folder, '*.mp3'))
         songs = []
 
         for file_path in mp3_files:
@@ -308,18 +337,23 @@ def list_songs():
             created_ts = os.path.getmtime(file_path)
 
             base_no_ext = os.path.splitext(file_name)[0]
-            # Hide the '(1)' alternate in UI by skipping it from listing
-            if base_no_ext.endswith('_(1)'):
+            # Hide the '_1' alternate in UI by skipping it from listing
+            if base_no_ext.endswith('_1'):
                 continue
             # Title is the base filename without extension
             title = base_no_ext
+            
+            # Check if album art exists
+            album_art_path = os.path.join(album_art_folder, f"{base_no_ext}.jpg")
+            album_art_url = f"/api/album-art/{base_no_ext}.jpg" if os.path.exists(album_art_path) else None
 
             songs.append({
                 "filename": file_name,
                 "title": title,
                 "size": file_size,
                 "created_at": created_ts,
-                "download_url": f"/api/download/{file_name}"
+                "download_url": f"/api/download/song/{file_name}",
+                "album_art_url": album_art_url
             })
 
         songs.sort(key=lambda s: s.get('created_at', 0), reverse=True)
@@ -329,14 +363,14 @@ def list_songs():
 
 
 # Download/stream a generated song
-@router.get('/download/{filename}')
+@router.get('/download/song/{filename}')
 def download_song(filename: str):
     """
-    Serves a generated song file for download or streaming.
+    Serves a generated song file for download or streaming from songs folder.
     """
     try:
-        files_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'files')
-        file_path = os.path.join(files_dir, filename)
+        songs_folder = storage.get_folder_path('songs')
+        file_path = os.path.join(songs_folder, filename)
 
         if not os.path.exists(file_path) or not filename.endswith('.mp3'):
             raise HTTPException(status_code=404, detail="Song not found")
@@ -347,28 +381,186 @@ def download_song(filename: str):
             raise e
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/generate-lyric-video")
-async def generate_lyric_video(
-    audio_file: UploadFile = File(...),
-    lyrics_file: UploadFile = File(None),
-    title: str = Form("song"),
-):
+
+# Serve album art
+@router.get('/album-art/{filename}')
+def get_album_art(filename: str):
     """
-    Generates a lyric video using WhisperX (lyrics optional).
+    Serves album art for a song.
     """
     try:
-        audio_bytes = await audio_file.read()
-        audio_name = storage.timestamped_filename(title, "mp3")
-        audio_path = storage.local_save_file(audio_bytes, audio_name)
+        album_art_folder = storage.get_folder_path('album_art')
+        file_path = os.path.join(album_art_folder, filename)
 
-        lyrics_path = None
-        if lyrics_file:
-            lyrics_bytes = await lyrics_file.read()
-            lyrics_name = storage.timestamped_filename(title, "txt")
-            lyrics_path = storage.local_save_file(lyrics_bytes, lyrics_name)
+        if not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail="Album art not found")
 
-        result_path = generate_lyric_video_from_files(audio_path, lyrics_path, title)
-        return {"status": "success", "video_path": result_path}
-
+        return FileResponse(file_path, media_type='image/jpeg', filename=filename)
     except Exception as e:
-        return {"status": "error", "detail": str(e)}
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# List background images
+@router.get('/backgrounds')
+def list_backgrounds():
+    """
+    Returns a list of available background images.
+    """
+    try:
+        backgrounds_folder = storage.get_folder_path('backgrounds')
+        if not os.path.exists(backgrounds_folder):
+            return {"backgrounds": []}
+        
+        bg_files = glob.glob(os.path.join(backgrounds_folder, '*.jpg')) + \
+                   glob.glob(os.path.join(backgrounds_folder, '*.png'))
+        
+        backgrounds = []
+        for file_path in bg_files:
+            filename = os.path.basename(file_path)
+            backgrounds.append({
+                "filename": filename,
+                "url": f"/api/background/{filename}"
+            })
+        
+        return {"backgrounds": backgrounds}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Serve background image
+@router.get('/background/{filename}')
+def get_background(filename: str):
+    """
+    Serves a background image.
+    """
+    try:
+        backgrounds_folder = storage.get_folder_path('backgrounds')
+        file_path = os.path.join(backgrounds_folder, filename)
+
+        if not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail="Background not found")
+
+        media_type = 'image/jpeg' if filename.endswith('.jpg') else 'image/png'
+        return FileResponse(file_path, media_type=media_type, filename=filename)
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/generate-lyric-video")
+async def generate_lyric_video(
+    title: str = Form(...),
+    song_filename: str = Form(None),
+    background_filename: str = Form(None),
+    lyrics: str = Form(None),
+    audio_file: UploadFile = File(None),
+    background_file: UploadFile = File(None),
+):
+    """
+    Generates a lyric video.
+    Can either select existing song or upload new one.
+    Can either select existing background or upload new one.
+    """
+    try:
+        # Check if title already exists for videos
+        if storage.check_title_exists(title, check_types=['videos']):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Video title '{title}' already exists. Please choose a different title."
+            )
+        
+        safe_title = storage.sanitize_title(title)
+        
+        # Handle audio source
+        if song_filename:
+            # Use existing song from library
+            songs_folder = storage.get_folder_path('songs')
+            audio_path = os.path.join(songs_folder, song_filename)
+            if not os.path.exists(audio_path):
+                raise HTTPException(status_code=404, detail="Selected song not found")
+        elif audio_file:
+            # Upload new audio file
+            audio_bytes = await audio_file.read()
+            audio_path = storage.local_save_file(audio_bytes, f"{safe_title}_temp.mp3", folder_type='songs')
+        else:
+            raise HTTPException(status_code=400, detail="Either song_filename or audio_file must be provided")
+        
+        # Handle background source
+        if background_filename:
+            # Use existing background
+            backgrounds_folder = storage.get_folder_path('backgrounds')
+            background_path = os.path.join(backgrounds_folder, background_filename)
+            if not os.path.exists(background_path):
+                raise HTTPException(status_code=404, detail="Selected background not found")
+        elif background_file:
+            # Upload new background
+            bg_bytes = await background_file.read()
+            bg_ext = background_file.filename.split('.')[-1] if '.' in background_file.filename else 'jpg'
+            background_path = storage.local_save_file(bg_bytes, f"{safe_title}_bg.{bg_ext}", folder_type='backgrounds')
+        else:
+            # Use default background if none provided
+            backgrounds_folder = storage.get_folder_path('backgrounds')
+            default_bg = os.path.join(backgrounds_folder, 'bg1.jpg')
+            if os.path.exists(default_bg):
+                background_path = default_bg
+            else:
+                background_path = None
+        
+        # Handle lyrics - get from existing file or use provided
+        lyrics_path = None
+        if lyrics:
+            # Save provided lyrics
+            lyrics_path = storage.local_save_file(lyrics.encode('utf-8'), f"{safe_title}.txt", folder_type='lyrics')
+        elif song_filename:
+            # Try to find existing lyrics for the song
+            lyrics_folder = storage.get_folder_path('lyrics')
+            song_base = os.path.splitext(song_filename)[0]
+            potential_lyrics = os.path.join(lyrics_folder, f"{song_base}.txt")
+            if os.path.exists(potential_lyrics):
+                lyrics_path = potential_lyrics
+        
+        # Generate the video
+        result_path = generate_lyric_video_from_files(audio_path, lyrics_path, safe_title, background_path)
+        
+        # Move the generated video to videos folder
+        video_filename = f"{safe_title}.mp4"
+        final_video_path = os.path.join(storage.get_folder_path('videos'), video_filename)
+        
+        # Move result to videos folder
+        if os.path.exists(result_path):
+            import shutil
+            shutil.move(result_path, final_video_path)
+        
+        return {
+            "status": "success",
+            "video_path": final_video_path,
+            "video_url": f"/api/video/{video_filename}",
+            "title": title
+        }
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Serve generated video
+@router.get('/video/{filename}')
+def get_video(filename: str):
+    """
+    Serves a generated lyric video.
+    """
+    try:
+        videos_folder = storage.get_folder_path('videos')
+        file_path = os.path.join(videos_folder, filename)
+
+        if not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail="Video not found")
+
+        return FileResponse(file_path, media_type='video/mp4', filename=filename)
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
