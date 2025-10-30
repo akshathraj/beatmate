@@ -101,7 +101,7 @@ Ensure the `files/` directory in beatmate_backend has write permissions for savi
 ## Files Structure
 
 ```
-gearshift-25/
+beatmate/
 ├── beatmate_backend/          # FastAPI backend
 │   ├── app/
 │   │   ├── main.py           # FastAPI app with CORS
