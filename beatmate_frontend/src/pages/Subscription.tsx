@@ -29,7 +29,12 @@ const Subscription = () => {
       <div className="relative z-10 container mx-auto px-4 py-16">
         {/* Back Button */}
         <div className="mb-8">
-          <Button asChild variant="ghost" size="sm" className="gap-2 hover:bg-primary/10">
+          <Button 
+            asChild 
+            variant="ghost" 
+            size="sm" 
+            className="gap-2 text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all duration-300 hover:translate-x-1"
+          >
             <Link to="/">
               <ArrowLeft className="w-4 h-4" />
               Back to Dashboard

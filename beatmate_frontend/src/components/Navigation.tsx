@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Link } from "react-router-dom";
-import { Menu, Home, Users, CreditCard, Music } from "lucide-react";
+import { Menu, Home, Users, CreditCard, Music, UserCircle } from "lucide-react";
 import { useState } from "react";
 
 export const NavigationMenu = () => {
@@ -65,6 +65,20 @@ export const NavigationMenu = () => {
             <div>
               <h3 className="font-semibold text-lg">Subscribe</h3>
               <p className="text-sm text-muted-foreground">Upgrade to premium</p>
+            </div>
+          </Link>
+
+          <Link 
+            to="/profile" 
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-4 p-4 rounded-xl hover:bg-primary/10 transition-all duration-300 group border border-transparent hover:border-primary/30"
+          >
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+              <UserCircle className="w-6 h-6 text-primary" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-lg">My Profile</h3>
+              <p className="text-sm text-muted-foreground">Manage your account</p>
             </div>
           </Link>
 
