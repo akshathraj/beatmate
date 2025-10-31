@@ -468,17 +468,35 @@ async def generate_lyric_video(
         
         safe_title = storage.sanitize_title(title)
         
-        # Handle audio source
+        # Handle audio source + lyrics detection
+        lyrics_path = None
+        
         if song_filename:
-            # Use existing song from library
+            # 🎵 Use existing song from library
             songs_folder = storage.get_folder_path('songs')
             audio_path = os.path.join(songs_folder, song_filename)
             if not os.path.exists(audio_path):
                 raise HTTPException(status_code=404, detail="Selected song not found")
+            
+            # 🎯 Check for corresponding lyrics file (will be mapped with AssemblyAI timing!)
+            lyrics_folder = storage.get_folder_path('lyrics')
+            song_base = os.path.splitext(song_filename)[0]
+            potential_lyrics = os.path.join(lyrics_folder, f"{song_base}.txt")
+            
+            if os.path.exists(potential_lyrics):
+                lyrics_path = potential_lyrics
+                print(f"✅ Found lyrics file for {song_filename}: {potential_lyrics}")
+                print(f"   -> Will map AssemblyAI timing to your formatted lyrics!")
+                print(f"   -> (Preserves punctuation, capitalization, formatting)")
+            else:
+                print(f"ℹ️  No lyrics file found for {song_filename}")
+                print(f"   -> Will use AssemblyAI transcription directly")
+                
         elif audio_file:
-            # Upload new audio file
+            # 📤 Upload new audio file (user-provided)
             audio_bytes = await audio_file.read()
             audio_path = storage.local_save_file(audio_bytes, f"{safe_title}_temp.mp3", folder_type='songs')
+            print(f"📤 User uploaded audio file")
         else:
             raise HTTPException(status_code=400, detail="Either song_filename or audio_file must be provided")
         
@@ -502,19 +520,6 @@ async def generate_lyric_video(
                 background_path = default_bg
             else:
                 background_path = None
-        
-        # Handle lyrics - get from existing file or use provided
-        lyrics_path = None
-        if lyrics:
-            # Save provided lyrics
-            lyrics_path = storage.local_save_file(lyrics.encode('utf-8'), f"{safe_title}.txt", folder_type='lyrics')
-        elif song_filename:
-            # Try to find existing lyrics for the song
-            lyrics_folder = storage.get_folder_path('lyrics')
-            song_base = os.path.splitext(song_filename)[0]
-            potential_lyrics = os.path.join(lyrics_folder, f"{song_base}.txt")
-            if os.path.exists(potential_lyrics):
-                lyrics_path = potential_lyrics
         
         # Generate the video
         result_path = generate_lyric_video_from_files(audio_path, lyrics_path, safe_title, background_path)
