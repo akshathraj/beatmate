@@ -3,7 +3,6 @@ from app import config
 import re
 
 # Initialize Gemini client once
-# client = genai.Client(api_key="AIzaSyCVox8noLLQQOgokVscwkaMmQ4t6F7r-DA")
 client = genai.Client(api_key=config.GEMINI_API_KEY)
 
 
@@ -27,20 +26,43 @@ def generate_complete_lyrics(lyrics_snippet: str, genre: str) -> str:
     Calls Gemini API to generate completed lyrics.
     """
     prompt_text = f"""
-You're a meticulous lyricist. Expand the user's lyrics into a full, singable song while STRICTLY preserving the original meaning, key phrases, and tone. Keep the user's lines intact where possible; only add connective lines, structure, and tasteful poetic enhancements.
+You are an expert music lyricist creating {genre} song lyrics. These lyrics will be used by MusicGPT to generate a professional song.
 
-Requirements:
-- Use sections: [Intro], [Verse 1], [Chorus], [Verse 2], [Bridge], [Chorus], [Outro]
-- Preserve user-provided lines verbatim when possible; do not contradict or overwrite their content
-- Add coherent rhymes, rhythm, and imagery that match the user's theme
-- Keep language natural and performance-ready; no explanations or metadata
-- Return only the lyrics with newline (\\n) separators
+**User Input:**
+{lyrics_snippet}
+
+**Instructions:**
+
+1. **Analyze the input type:**
+   - If it's a DESCRIPTION/PROMPT → Create complete original lyrics
+   - If it's PARTIAL LYRICS → PRESERVE exactly as written, then expand naturally
+   - If it's COMPLETE LYRICS → Keep all content, just add structure tags if missing
+   - Generate lyrics in the language specified by the user or match the language of the provided lyrics
+
+2. **Essential Structure:**
+   - Use sections: [Intro], [Verse 1], [Chorus], [Verse 2], [Chorus], [Bridge], [Chorus], [Outro]
+   - Make the chorus catchy and repeatable
+
+3. **{genre} Genre Optimization:**
+   - Follow typical {genre} themes, rhythm, and style
+   - Use appropriate language and imagery for this genre
+   - Create singable, memorable hooks
+
+4. **Performance Quality:**
+   - Add vocal fills where natural (if necessary): (oh), (yeah), (mmm)
+   - Preserve user-provided lines verbatim when possible; do not contradict or overwrite their content
+   - Add coherent rhymes, rhythm, and imagery that match the user's theme
+   - Build emotional arc throughout the song
+   - Ensure natural speech patterns for singing
+
+**Output Format:**
+- Section markers: [Intro], [Verse 1], etc.
+- One line per lyric line
+- ONLY the lyrics - no explanations
 - DO NOT use markdown formatting (no ```, no **, no #, no *)
 - Output raw lyrics only, no code blocks or formatting
 
-Genre: {genre}
-User lyrics (must be preserved as anchors):
-{lyrics_snippet}
+Create lyrics that will sound amazing when performed!
 """
 
     response = client.models.generate_content(
