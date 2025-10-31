@@ -11,6 +11,7 @@ interface SongItem {
   size: number;
   created_at?: number;
   download_url: string;
+  album_art_url?: string;
 }
 
 export const RecentSongs = () => {
@@ -115,14 +116,17 @@ export const RecentSongs = () => {
   };
 
   return (
-    <DashboardCard glowColor="songs" className="h-full">
-      <div className="space-y-4">
+    <DashboardCard glowColor="songs" className="h-full w-full" compact>
+      <div className="space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-gradient-songs rounded-lg">
-              <Music2 className="w-5 h-5 text-primary-foreground" />
+              <Music2 className="w-6 h-6 text-primary-foreground" />
             </div>
-            <h3 className="text-lg font-semibold text-foreground">Recent Songs</h3>
+            <div>
+              <h2 className="text-2xl font-bold text-foreground">Recent Songs</h2>
+              <p className="text-muted-foreground">Your latest creations</p>
+            </div>
           </div>
           <Button variant="outline" size="sm" onClick={fetchSongs} disabled={isLoading}>
             {isLoading ? 'Loading…' : 'Refresh'}
@@ -136,34 +140,47 @@ export const RecentSongs = () => {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {songs.map((song, idx) => (
-              <Card key={song.filename} className="bg-card/30 border border-border/30 rounded-lg overflow-hidden hover:bg-card/50 transition-colors">
-                {/* Themed header with vinyl */}
-                <div className="h-24 w-full flex items-center justify-center bg-gradient-songs/20">
-                  <div className="relative w-20 h-20 rounded-full bg-gradient-to-r from-gray-800 to-black border-4 border-gray-700 shadow-inner">
-                    <div className="absolute inset-3 rounded-full border border-gray-600/40"></div>
-                    <div className="absolute inset-5 rounded-full border border-gray-600/20"></div>
-                    <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-7 h-7 rounded-full border-2 ${[
-                      'bg-red-600 border-yellow-300',
-                      'bg-blue-600 border-cyan-300',
-                      'bg-green-600 border-lime-300',
-                      'bg-purple-600 border-pink-300'
-                    ][idx % 4]}`}></div>
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-black rounded-full"></div>
-                  </div>
+              <Card key={song.filename} className="bg-card/30 border border-border/30 rounded-lg overflow-hidden hover:bg-card/50 transition-all duration-300 hover:scale-105 hover:shadow-xl hover:shadow-primary/20 hover:border-primary/50 cursor-pointer group">
+                {/* Album art or vinyl record */}
+                <div className="h-24 w-full flex items-center justify-center bg-gradient-songs/20 group-hover:bg-gradient-songs/30 transition-colors duration-300">
+                  {song.album_art_url ? (
+                    <img 
+                      src={`http://localhost:8000${song.album_art_url}`}
+                      alt={song.title || song.filename}
+                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                    />
+                  ) : (
+                    <div className="relative w-20 h-20 rounded-full bg-gradient-to-r from-gray-800 to-black border-4 border-gray-700 shadow-inner group-hover:rotate-45 transition-transform duration-500">
+                      <div className="absolute inset-3 rounded-full border border-gray-600/40"></div>
+                      <div className="absolute inset-5 rounded-full border border-gray-600/20"></div>
+                      <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-7 h-7 rounded-full border-2 ${[
+                        'bg-red-600 border-yellow-300',
+                        'bg-blue-600 border-cyan-300',
+                        'bg-green-600 border-lime-300',
+                        'bg-purple-600 border-pink-300'
+                      ][idx % 4]}`}></div>
+                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-black rounded-full"></div>
+                    </div>
+                  )}
                 </div>
                 <CardHeader className="py-3">
-                  <CardTitle className="text-sm truncate text-foreground">{song.title || song.filename.replace('.mp3','')}</CardTitle>
+                  <CardTitle className="text-sm truncate text-foreground group-hover:text-primary transition-colors duration-300">{song.title || song.filename.replace('.mp3','')}</CardTitle>
                 </CardHeader>
                 <CardContent className="flex items-center justify-between pt-0 pb-3">
                   <Button 
                     size="sm" 
                     variant={currentFile === song.filename && isPlaying ? "default" : "outline"}
                     onClick={() => play(song)}
-                    className="rounded-full"
+                    className="rounded-full hover:scale-110 transition-transform duration-200 hover:bg-primary hover:text-primary-foreground"
                   >
                     <Play className="w-4 h-4" />
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => download(song)}>
+                  <Button 
+                    size="sm" 
+                    variant="ghost" 
+                    onClick={() => download(song)}
+                    className="hover:scale-110 transition-transform duration-200 hover:text-primary"
+                  >
                     <Download className="w-4 h-4" />
                   </Button>
                 </CardContent>
