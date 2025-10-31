@@ -71,6 +71,8 @@ export default {
         'glow': 'var(--shadow-glow)',
         'card': 'var(--shadow-card)',
         'intense': 'var(--shadow-intense)',
+        'subtle': 'var(--shadow-subtle)',
+        'strong': 'var(--shadow-strong)',
       },
       transitionTimingFunction: {
         'smooth': 'var(--transition-smooth)',
@@ -145,6 +147,26 @@ export default {
             transform: "translateY(0)" 
           },
         },
+        "fade-in-left": {
+          "0%": { 
+            opacity: "0", 
+            transform: "translateX(-20px)" 
+          },
+          "100%": { 
+            opacity: "1", 
+            transform: "translateX(0)" 
+          },
+        },
+        "fade-in-right": {
+          "0%": { 
+            opacity: "0", 
+            transform: "translateX(20px)" 
+          },
+          "100%": { 
+            opacity: "1", 
+            transform: "translateX(0)" 
+          },
+        },
         "slide-up": {
           "0%": { 
             opacity: "0", 
@@ -212,6 +234,8 @@ export default {
         "float-slow": "float-slow 8s ease-in-out infinite",
         "glow-rotate": "glow-rotate 4s ease-in-out infinite",
         "fade-in": "fade-in 0.5s ease-out",
+        "fade-in-left": "fade-in-left 0.6s ease-out",
+        "fade-in-right": "fade-in-right 0.6s ease-out",
         "slide-up": "slide-up 0.6s ease-out",
         "scale-in": "scale-in 0.3s ease-out",
         "shimmer": "shimmer 3s linear infinite",

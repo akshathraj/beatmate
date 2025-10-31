@@ -19,7 +19,7 @@ const Profile = () => {
             size="sm" 
             className="gap-2 text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all duration-300 hover:translate-x-1"
           >
-            <Link to="/">
+            <Link to="/dashboard">
               <ArrowLeft className="w-4 h-4" />
               Back to Dashboard
             </Link>

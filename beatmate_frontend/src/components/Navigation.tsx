@@ -27,7 +27,7 @@ export const NavigationMenu = () => {
         </SheetHeader>
         <nav className="flex flex-col gap-4 mt-8">
           <Link 
-            to="/" 
+            to="/dashboard" 
             onClick={() => setOpen(false)}
             className="flex items-center gap-4 p-4 rounded-xl hover:bg-primary/10 transition-all duration-300 group border border-transparent hover:border-primary/30"
           >
