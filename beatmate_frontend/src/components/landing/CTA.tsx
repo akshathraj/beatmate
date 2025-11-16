@@ -15,7 +15,7 @@ const CTA = () => {
               Start for <span className="text-gradient">Free</span>
             </h3>
             <p className="text-muted-foreground mb-6">
-              No credit card required. Create unlimited songs and collaborate with friends.
+              No credit card required. Create unlimited songs, remix, and generate lyric videos.
             </p>
             <Button 
               className="btn-hero text-lg px-8 py-4"
@@ -33,7 +33,7 @@ const CTA = () => {
             <span className="text-gradient">Powered by BeatMate.</span>
           </h2>
           <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
-            Join the future of music creation. Turn your ideas into songs, collaborate in real-time, 
+            Join the future of music creation. Turn your ideas into songs, create stunning videos,
             and share your creativity with the world.
           </p>
           

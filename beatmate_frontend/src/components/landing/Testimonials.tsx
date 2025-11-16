@@ -12,26 +12,26 @@ const Testimonials = () => {
     },
     {
       id: 2,
-      name: "Supreet Dey", 
+      name: "Sarah Chen",
       role: "Singer-Songwriter",
-      avatar: "M",
-      content: "The collaboration features are incredible. My band can create music together even when we're in different cities. Game changer!",
+      avatar: "S",
+      content: "The lyric video generation is incredible. I can create professional music videos for my songs in minutes. Absolute game changer!",
       rating: 5
     },
     {
       id: 3,
-      name: "Supreet Dey",
+      name: "David Miller",
       role: "Content Creator",
-      avatar: "M", 
+      avatar: "D",
       content: "As someone with zero musical background, BeatMate lets me create professional-sounding tracks for my videos. Absolutely amazing!",
       rating: 5
     },
     {
       id: 4,
-      name: "Supreet Dey",
+      name: "Alex Rivera",
       role: "DJ & Producer",
-      avatar: "M",
-      content: "BeatMate understands musical styles incredibly well. I can generate variations of my tracks instantly. This is the future of music creation.",
+      avatar: "A",
+      content: "The remix feature is pure gold. I can blend songs instantly and get perfect mashups. This is the future of music creation.",
       rating: 5
     }
   ];

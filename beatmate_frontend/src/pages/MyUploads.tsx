@@ -78,4 +78,3 @@ const MyUploads = () => {
 };
 
 export default MyUploads;
-

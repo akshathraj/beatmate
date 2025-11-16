@@ -3,27 +3,27 @@ const Features = () => {
     {
       icon: "🎤",
       title: "Smart Song Generator",
-      description: "Advanced technology creates complete songs from your ideas in seconds"
+      description: "Advanced AI creates complete songs from your ideas in seconds"
     },
     {
-      icon: "🤝",
-      title: "Real-time Collaboration", 
-      description: "Work together with friends in live music creation sessions"
+      icon: "🎬",
+      title: "Lyric Video Creator",
+      description: "Generate stunning lyric videos with custom visuals and animations"
+    },
+    {
+      icon: "🎵",
+      title: "Remix Studio",
+      description: "Blend multiple songs together to create unique AI-powered mashups"
     },
     {
       icon: "📂",
-      title: "Save & Download Songs",
+      title: "Save & Download",
       description: "Keep your creations forever with high-quality downloads"
     },
     {
       icon: "🎧",
-      title: "Simple Built-in Player",
+      title: "Built-in Player",
       description: "Listen and share your music with our seamless audio player"
-    },
-    {
-      icon: "🖤",
-      title: "Minimal Dark UI",
-      description: "Beautiful, distraction-free interface designed for creators"
     },
     {
       icon: "⚡",
