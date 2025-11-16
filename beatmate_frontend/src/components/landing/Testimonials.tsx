@@ -12,26 +12,26 @@ const Testimonials = () => {
     },
     {
       id: 2,
-      name: "Sarah Chen", 
+      name: "Supreet Dey", 
       role: "Singer-Songwriter",
-      avatar: "S",
-      content: "The lyric video generation is incredible. I can create professional music videos for my songs in minutes. Absolute game changer!",
+      avatar: "M",
+      content: "The collaboration features are incredible. My band can create music together even when we're in different cities. Game changer!",
       rating: 5
     },
     {
       id: 3,
-      name: "David Miller",
+      name: "Supreet Dey",
       role: "Content Creator",
-      avatar: "D", 
+      avatar: "M", 
       content: "As someone with zero musical background, BeatMate lets me create professional-sounding tracks for my videos. Absolutely amazing!",
       rating: 5
     },
     {
       id: 4,
-      name: "Alex Rivera",
+      name: "Supreet Dey",
       role: "DJ & Producer",
-      avatar: "A",
-      content: "The remix feature is pure gold. I can blend songs instantly and get perfect mashups. This is the future of music creation.",
+      avatar: "M",
+      content: "BeatMate understands musical styles incredibly well. I can generate variations of my tracks instantly. This is the future of music creation.",
       rating: 5
     }
   ];
@@ -142,4 +142,3 @@ const Testimonials = () => {
 };
 
 export default Testimonials;
-

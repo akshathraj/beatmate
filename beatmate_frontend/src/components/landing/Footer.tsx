@@ -29,7 +29,7 @@ const Footer = () => {
 
           {/* Copyright */}
           <div className="text-sm text-muted-foreground">
-            © 2025 BeatMate. All rights reserved. Made with ❤️ for music creators.
+            © 2024 BeatMate. All rights reserved. Made with ❤️ for music creators.
           </div>
         </div>
       </div>
@@ -38,4 +38,3 @@ const Footer = () => {
 };
 
 export default Footer;
-

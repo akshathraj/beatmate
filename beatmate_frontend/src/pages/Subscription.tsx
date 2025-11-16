@@ -14,7 +14,7 @@ const Subscription = () => {
   ];
 
   const premiumPlanFeatures = [
-    { text: "100 songs / month", included: true },
+    { text: "200 songs / month", included: true },
     { text: "Multi-lingual generation", included: true },
     { text: "Remix tool", included: true },
     { text: "Lyric-video generation", included: true },

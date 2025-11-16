@@ -1,10 +1,14 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { useNavigate } from "react-router-dom";
+import LoginModal from "./LoginModal";
+import SignupModal from "./SignupModal";
+import OurTeamModal from "./OurTeamModal";
 
 const LandingHeader = () => {
   const [isScrolled, setIsScrolled] = useState(false);
-  const navigate = useNavigate();
+  const [isLoginOpen, setIsLoginOpen] = useState(false);
+  const [isSignupOpen, setIsSignupOpen] = useState(false);
+  const [isTeamOpen, setIsTeamOpen] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -28,9 +32,8 @@ const LandingHeader = () => {
     >
       <div className="container mx-auto px-6 py-4">
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2 cursor-pointer" onClick={() => navigate("/")}>
-            <div className="w-8 h-8 bg-gradient-to-r from-primary to-accent rounded-lg flex items-center justify-center logo-rotate">
-              <span className="text-primary-foreground font-bold text-lg">🎵</span>
+          <div className="flex items-center space-x-2">
+            <div className="w-8 h-8 bg-gradient-to-r from-primary to-accent rounded-lg flex items-center justify-center logo-rotate">              <span className="text-primary-foreground font-bold text-lg">🎵</span>
             </div>
             <span className="text-xl font-bold text-gradient">BeatMate</span>
           </div>
@@ -54,28 +57,38 @@ const LandingHeader = () => {
             >
               Testimonials
             </button>
+            <button
+              onClick={() => setIsTeamOpen(true)}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Our Team
+            </button>
           </nav>
 
           <div className="flex items-center space-x-4">
             <Button 
               variant="ghost" 
               className="text-muted-foreground hover:text-foreground"
-              onClick={() => navigate("/dashboard")}
+              onClick={() => setIsLoginOpen(true)}
             >
               Login
             </Button>
             <Button 
               className="btn-hero"
-              onClick={() => navigate("/dashboard")}
+              onClick={() => setIsSignupOpen(true)}
             >
-              Get Started Free
+              Sign Up Free
             </Button>
           </div>
         </div>
       </div>
+
+      {/* Modals */}
+      <LoginModal isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} />
+      <SignupModal isOpen={isSignupOpen} onClose={() => setIsSignupOpen(false)} />
+      <OurTeamModal isOpen={isTeamOpen} onClose={() => setIsTeamOpen(false)} />
     </header>
   );
 };
 
 export default LandingHeader;
-

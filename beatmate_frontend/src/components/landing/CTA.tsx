@@ -1,9 +1,9 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { useNavigate } from "react-router-dom";
+import SignupModal from "./SignupModal";
 
 const CTA = () => {
-  const navigate = useNavigate();
-  
+  const [isSignupOpen, setIsSignupOpen] = useState(false);
   return (
     <section className="py-24 bg-muted/20">
       <div className="container mx-auto px-6">
@@ -15,13 +15,13 @@ const CTA = () => {
               Start for <span className="text-gradient">Free</span>
             </h3>
             <p className="text-muted-foreground mb-6">
-              No credit card required. Create unlimited songs, remix, and generate lyric videos.
+              No credit card required. Create unlimited songs and collaborate with friends.
             </p>
             <Button 
               className="btn-hero text-lg px-8 py-4"
-              onClick={() => navigate("/dashboard")}
+              onClick={() => setIsSignupOpen(true)}
             >
-              Get Started Free
+              Sign Up Free
             </Button>
           </div>
         </div>
@@ -33,13 +33,13 @@ const CTA = () => {
             <span className="text-gradient">Powered by BeatMate.</span>
           </h2>
           <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
-            Join the future of music creation. Turn your ideas into songs, create stunning videos, 
+            Join the future of music creation. Turn your ideas into songs, collaborate in real-time, 
             and share your creativity with the world.
           </p>
           
           <Button 
             className="btn-hero text-xl px-12 py-6 mb-8"
-            onClick={() => navigate("/dashboard")}
+            onClick={() => setIsSignupOpen(true)}
           >
             Start Creating Now
           </Button>
@@ -60,9 +60,11 @@ const CTA = () => {
           </div>
         </div>
       </div>
+
+      {/* Signup Modal */}
+      <SignupModal isOpen={isSignupOpen} onClose={() => setIsSignupOpen(false)} />
     </section>
   );
 };
 
 export default CTA;
-
