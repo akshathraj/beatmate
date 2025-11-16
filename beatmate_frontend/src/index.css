@@ -63,6 +63,8 @@ All colors MUST be HSL.
     --shadow-glow: 0 0 30px hsl(var(--ai-glow) / 0.3);
     --shadow-card: 0 8px 32px hsl(220 26% 3% / 0.8);
     --shadow-intense: 0 0 50px hsl(var(--ai-glow) / 0.5);
+    --shadow-subtle: 0 4px 20px hsl(0 0% 0% / 0.3);
+    --shadow-strong: 0 8px 32px hsl(0 0% 0% / 0.5);
 
     /* Animations */
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -195,6 +197,41 @@ All colors MUST be HSL.
     to {
       transform: rotateY(360deg);
     }
+  }
+
+  /* Spin Slow Animation for Icons */
+  .animate-spin-slow {
+    animation: spin-slow 8s linear infinite;
+  }
+
+  @keyframes spin-slow {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  /* Animation Delays */
+  .delay-300 {
+    animation-delay: 300ms;
+  }
+
+  .delay-500 {
+    animation-delay: 500ms;
+  }
+
+  .delay-700 {
+    animation-delay: 700ms;
+  }
+
+  .delay-1000 {
+    animation-delay: 1000ms;
+  }
+
+  .delay-2000 {
+    animation-delay: 2000ms;
   }
 }
 

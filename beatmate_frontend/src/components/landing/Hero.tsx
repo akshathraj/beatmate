@@ -1,9 +1,10 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { useNavigate } from "react-router-dom";
+import SignupModal from "./SignupModal";
+import heroMockup from "@/assets/hero-mockup.jpg";
 
 const Hero = () => {
-  const navigate = useNavigate();
-  
+  const [isSignupOpen, setIsSignupOpen] = useState(false);
   return (
     <section className="relative min-h-screen flex items-center justify-center animated-bg overflow-hidden">
       {/* Animated background elements */}
@@ -33,16 +34,15 @@ const Hero = () => {
             <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
               <Button
                 className="btn-hero text-lg px-8 py-4"
-                onClick={() => navigate("/dashboard")}
+                onClick={() => setIsSignupOpen(true)}
               >
                 Get Started Free
               </Button>
               <Button
                 variant="outline"
                 className="btn-secondary text-lg px-8 py-4"
-                onClick={() => document.getElementById("how-it-works")?.scrollIntoView({ behavior: "smooth" })}
               >
-                Learn More
+                Watch Demo
               </Button>
             </div>
 
@@ -58,37 +58,27 @@ const Hero = () => {
             </div>
           </div>
 
-          {/* Right Content - Music Visualization */}
+          {/* Right Content - Video */}
           <div className="relative animate-fade-in-right">
-            <div className="relative bg-gradient-to-br from-primary/20 to-accent/20 rounded-2xl p-8 shadow-strong">
-              <div className="flex flex-col space-y-4">
-                {/* Waveform Visualization */}
-                <div className="flex items-center space-x-1 h-32 justify-center">
-                  {Array.from({ length: 40 }).map((_, i) => (
-                    <div
-                      key={i}
-                      className="bg-primary rounded-full animate-pulse"
-                      style={{
-                        width: "4px",
-                        height: `${Math.random() * 80 + 20}px`,
-                        animationDelay: `${i * 0.1}s`
-                      }}
-                    ></div>
-                  ))}
-                </div>
-                
-                <div className="text-center">
-                  <p className="text-lg font-semibold mb-2">🎵 AI-Powered Music Generation</p>
-                  <p className="text-sm text-muted-foreground">Create professional songs in seconds</p>
-                </div>
-              </div>
+            <div className="relative">
+              <video
+                autoPlay
+                muted
+                loop
+                playsInline
+                className="w-10/12 h-auto rounded-2xl shadow-strong glow-primary"
+                poster={heroMockup}
+              >
+                <source src="/myvideo.mp4" type="video/mp4" />
+                Your browser does not support the video tag.
+              </video>
 
               {/* Floating UI Elements */}
               <div className="absolute -top-4 -left-4 bg-card border border-border rounded-lg p-3 animate-float">
                 <div className="flex items-center space-x-2">
                   <div className="w-3 h-3 bg-primary rounded-full animate-glow-pulse"></div>
                   <span className="text-sm font-medium">
-                    Generating...
+                    BeatMate Generating...
                   </span>
                 </div>
               </div>
@@ -112,11 +102,14 @@ const Hero = () => {
           <div className="w-1 h-3 bg-muted-foreground rounded-full mt-2"></div>
         </div>
       </div>
+
+      {/* Signup Modal */}
+      <SignupModal
+        isOpen={isSignupOpen}
+        onClose={() => setIsSignupOpen(false)}
+      />
     </section>
   );
 };
 
 export default Hero;
-
-
-

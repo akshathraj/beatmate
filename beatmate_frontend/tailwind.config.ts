@@ -225,6 +225,10 @@ export default {
             transform: "translateX(100%)" 
           },
         },
+        "glow-pulse": {
+          "0%, 100%": { filter: "drop-shadow(0 0 20px hsl(var(--primary) / 0.3))" },
+          "50%": { filter: "drop-shadow(0 0 40px hsl(var(--primary) / 0.6))" }
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -243,6 +247,7 @@ export default {
         "equalizer-2": "equalizer-2 1.2s ease-in-out infinite",
         "equalizer-3": "equalizer-3 0.8s ease-in-out infinite",
         "wave": "wave 4s linear infinite",
+        "glow-pulse": "glow-pulse 3s ease-in-out infinite",
       },
     },
   },
