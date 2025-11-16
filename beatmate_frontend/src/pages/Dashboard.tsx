@@ -1,5 +1,5 @@
 import { SongGenerator } from "@/components/dashboard/SongGenerator";
-import { RecentSongs } from "@/components/dashboard/RecentSongs";
+import { MusicPlayer } from "@/components/dashboard/MusicPlayer";
 import { RemixSongs } from "@/components/dashboard/RemixSongs";
 import { LyricVideoGenerator } from "@/components/dashboard/LyricVideoGenerator";
 import { NavigationMenu } from "@/components/Navigation";
@@ -51,7 +51,7 @@ const Dashboard = () => {
                 <RemixSongs />
               </div>
               <div className="flex">
-                <RecentSongs />
+                <MusicPlayer />
               </div>
             </div>
           </div>
