@@ -120,6 +120,33 @@ async def musicgpt_webhook(request: Request):
         except Exception:
             pass
 
+        # Handle album cover generation webhooks separately
+        subtype = payload.get("subtype", "")
+        if subtype == "album_cover_generation":
+            print(f"🎨 Album cover generation webhook received for: {title}")
+            try:
+                import requests
+                from .utils import storage
+                
+                album_art_url = payload.get("image_path") or payload.get("album_art") or payload.get("image_url")
+                if album_art_url:
+                    safe_title = storage.sanitize_title(title)
+                    art_response = requests.get(album_art_url)
+                    if art_response.status_code == 200:
+                        art_filename = f"{safe_title}.jpg"
+                        storage.local_save_file(art_response.content, art_filename, folder_type='album_art')
+                        print(f"✅ Saved album cover: {art_filename}")
+                        return {"success": True, "message": "Album cover saved"}
+                    else:
+                        print(f"⚠️  Failed to download album cover (HTTP {art_response.status_code})")
+                        return {"success": False, "error": f"Failed to download album cover"}
+                else:
+                    print(f"⚠️  No album cover URL found in payload")
+                    return {"success": False, "error": "No album cover URL"}
+            except Exception as e:
+                print(f"⚠️  Error saving album cover: {e}")
+                return {"success": False, "error": str(e)}
+
         if conversion_path:
             import requests
             from .utils import storage
@@ -152,17 +179,19 @@ async def musicgpt_webhook(request: Request):
 
             print(f"Saved song locally: {local_path}")
             
-            # Save album art if provided
+            # Save album art if provided (MusicGPT sends it as image_path, image_url, or album_art)
             try:
-                album_art_url = payload.get("album_art") or payload.get("image_url")
+                album_art_url = payload.get("image_path") or payload.get("album_art") or payload.get("image_url")
                 if album_art_url:
                     art_response = requests.get(album_art_url)
                     if art_response.status_code == 200:
                         art_filename = f"{safe_title}.jpg"
                         storage.local_save_file(art_response.content, art_filename, folder_type='album_art')
-                        print(f"Saved album art: {art_filename}")
+                        print(f"✅ Saved album art: {art_filename}")
+                    else:
+                        print(f"⚠️  Failed to download album art (HTTP {art_response.status_code})")
             except Exception as ae:
-                print(f"Could not save album art: {ae}")
+                print(f"⚠️  Could not save album art: {ae}")
 
             # If a temp user-lyrics file exists for this task, promote it to final .txt next to mp3
             try:
