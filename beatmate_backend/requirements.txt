@@ -16,6 +16,10 @@ scipy>=1.12.0
 # ---- Audio Processing ----
 assemblyai
 
+# ---- Optional Audio Processing (fallback for whisperx if needed) ----
+# whisperx  # Uncomment if you want to use WhisperX as fallback alignment method
+# torch     # Required for whisperx
+
 # ---- Utilities & Helpers ----
 tqdm>=4.66.4
 typing-extensions>=4.12.2
