@@ -21,15 +21,19 @@ export const RemixSongs = () => {
   const [songB, setSongB] = useState<string>("");
   const [title, setTitle] = useState<string>("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generationStage, setGenerationStage] = useState<string>("");
   const [remixUrl, setRemixUrl] = useState<string | null>(null);
   const remixAudioRef = useRef<HTMLAudioElement | null>(null);
   const [isRemixPlaying, setIsRemixPlaying] = useState(false);
   const [remixCurrentTime, setRemixCurrentTime] = useState(0);
   const [remixDuration, setRemixDuration] = useState(0);
   const [waveHeights, setWaveHeights] = useState<number[]>(Array.from({ length: 16 }, () => 10));
+  const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const waveTimerRef = useRef<number | null>(null);
   const [requestStartEpoch, setRequestStartEpoch] = useState<number | null>(null);
   const [showTitleDialog, setShowTitleDialog] = useState(false);
+  const pollIntervalRef = useRef<number | null>(null);
+  const cooldownTimerRef = useRef<number | null>(null);
   const { toast } = useToast();
 
   const fetchSongs = async () => {
@@ -53,9 +57,69 @@ export const RemixSongs = () => {
     return () => window.removeEventListener('song-generated', onRefresh);
   }, []);
 
+  // Cleanup polling interval on unmount
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) {
+        clearTimeout(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+    };
+  }, []);
+
+  // Cleanup cooldown timer on unmount
+  useEffect(() => {
+    return () => {
+      if (cooldownTimerRef.current) {
+        clearInterval(cooldownTimerRef.current);
+        cooldownTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  // Start cooldown timer
+  const startCooldown = (seconds: number) => {
+    setCooldownSeconds(seconds);
+    
+    if (cooldownTimerRef.current) {
+      clearInterval(cooldownTimerRef.current);
+    }
+    
+    cooldownTimerRef.current = window.setInterval(() => {
+      setCooldownSeconds((prev) => {
+        if (prev <= 1) {
+          if (cooldownTimerRef.current) {
+            clearInterval(cooldownTimerRef.current);
+            cooldownTimerRef.current = null;
+          }
+          
+          // Notify user when cooldown ends
+          toast({
+            title: "✅ Ready!",
+            description: "You can now generate remixes again!",
+            duration: 4000,
+          });
+          
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
   const toAbsoluteUrl = (fn: string) => `http://localhost:8000${fn}`;
 
   const handleOpenTitleDialog = () => {
+    // Show cooldown message if still in cooldown
+    if (cooldownSeconds > 0) {
+      toast({
+        title: "⏳ Please Wait",
+        description: "Your previous remix is still being processed in the background. We'll notify you when you can generate another remix.",
+        duration: 4000,
+      });
+      return;
+    }
+
     const sA = songs.find(s => (s.title || s.filename) === songA || s.filename === songA);
     const sB = songs.find(s => (s.title || s.filename) === songB || s.filename === songB);
     if (!sA || !sB) {
@@ -85,10 +149,18 @@ export const RemixSongs = () => {
       if (!sA || !sB) {
         toast({ title: 'Select two songs', description: 'Please choose two songs to remix.', variant: 'destructive' });
         setIsGenerating(false);
+        setGenerationStage("");
         return;
       }
 
       setRequestStartEpoch(Date.now() / 1000);
+
+      // Show initial "request received" toast
+      toast({
+        title: "📨 Request Received",
+        description: "Processing your remix request...",
+        duration: 3000,
+      });
 
       // Call backend remix endpoint to create new lyrics and generate a new song
       const response = await fetch('http://localhost:8000/api/remix', {
@@ -104,16 +176,30 @@ export const RemixSongs = () => {
       });
 
       if (!response.ok) {
-        let detail = 'Remix request failed';
-        try {
-          const err = await response.json();
-          detail = err?.detail || detail;
-        } catch {}
-        throw new Error(detail);
+        const errorData = await response.json().catch(() => ({}));
+        const errorDetail = errorData.detail || `HTTP ${response.status}`;
+        console.error('❌ Remix generation failed:', errorDetail);
+        console.error('Full error:', errorData);
+        throw new Error(errorDetail);
       }
-      toast({ title: '🎧 Remix Requested', description: 'Your remix is being generated. It will appear in Recent Songs when ready.' });
+      
+      setGenerationStage("");
+      
+      // Show "lyrics generated" toast
+      toast({ 
+        title: '✅ Lyrics Generated!', 
+        description: 'Remix generation is now in progress. This usually takes 1-2 minutes.',
+        duration: 5000 
+      });
+      
       // trigger frontend refresh loop
       window.dispatchEvent(new CustomEvent('song-generated'));
+
+      // Clear any existing polling
+      if (pollIntervalRef.current) {
+        clearTimeout(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
 
       // Poll for the new remix media in /api/songs
       let attempts = 0;
@@ -130,17 +216,27 @@ export const RemixSongs = () => {
       };
       const providedTitleNormalized = normalizeTitle(title);
       const startCutoff = (requestStartEpoch || (Date.now() / 1000)) - 2;
-      let pollTimeout: number | null = null;
       
       console.log(`🔍 Polling for remix with title: "${title}"`);
       console.log(`🔍 Normalized search term: "${providedTitleNormalized}"`);
       
       const poll = async () => {
         try {
+          attempts++;
+          
+          // Show generic "still generating" toast every 30 seconds (every 6 attempts)
+          if (attempts > 0 && attempts % 6 === 0) {
+            toast({
+              title: "🎵 Still Generating...",
+              description: "Your remix is being created. This usually takes 1-2 minutes.",
+              duration: 4000,
+            });
+          }
+          
           const res = await fetch('http://localhost:8000/api/songs');
           if (res.ok) {
             const data = await res.json();
-            console.log(`🔍 Poll attempt ${attempts + 1}/${maxAttempts}: Found ${data.songs?.length || 0} songs`);
+            console.log(`🔍 Poll attempt ${attempts}/${maxAttempts}: Found ${data.songs?.length || 0} songs`);
             
             const found = (data.songs as any[]).find((song: any) => {
               const t = normalizeTitle(song.title || '');
@@ -166,9 +262,21 @@ export const RemixSongs = () => {
               const url = toAbsoluteUrl(found.download_url);
               setRemixUrl(url);
               setIsGenerating(false);
-              // Trigger refresh of Recent Songs
+              setGenerationStage("");
+              
+              // Clear polling interval
+              if (pollIntervalRef.current) {
+                clearTimeout(pollIntervalRef.current);
+                pollIntervalRef.current = null;
+              }
+              
+              // Start 35-second cooldown to allow MusicGPT to finish processing the 2nd variant
+              // This prevents "TOO MANY PARALLEL REQUESTS" errors (invisible to user)
+              startCooldown(35);
+              
+              // Trigger refresh of Music Player
               window.dispatchEvent(new CustomEvent('song-generated'));
-              toast({ title: '🎉 Remix Complete!', description: 'Your remix is ready to play.' });
+              toast({ title: '🎉 Remix Complete!', description: `"${title}" is ready to play!`, duration: 5000 });
               console.log('✅ Remix found and loaded:', found.title || found.filename);
               return; // Stop polling
             }
@@ -176,19 +284,49 @@ export const RemixSongs = () => {
         } catch (err) {
           console.error('❌ Error polling for remix:', err);
         }
-        attempts++;
+        
         if (attempts < maxAttempts) {
-          pollTimeout = window.setTimeout(poll, intervalMs);
+          pollIntervalRef.current = window.setTimeout(poll, intervalMs);
         } else {
           setIsGenerating(false);
-          toast({ title: 'Remix timeout', description: 'The remix is taking longer than expected. Check Recent Songs later.', variant: 'destructive' });
-          console.log('❌ Polling timeout - remix not found');
+          setGenerationStage("");
+          
+          if (pollIntervalRef.current) {
+            clearTimeout(pollIntervalRef.current);
+            pollIntervalRef.current = null;
+          }
+          
+          toast({ 
+            title: '⏰ Still Processing', 
+            description: 'Your remix is taking longer than expected. Please check the music player in a few minutes.',
+            duration: 7000
+          });
         }
       };
-      pollTimeout = window.setTimeout(poll, intervalMs);
+      
+      pollIntervalRef.current = window.setTimeout(poll, intervalMs);
     } catch (e: any) {
-      toast({ title: 'Remix failed', description: String(e?.message || e), variant: 'destructive' });
+      console.error('❌ Error generating remix:', e);
+      console.error('Error details:', {
+        message: e?.message,
+        stack: e?.stack,
+        name: e?.name
+      });
+      
+      toast({ 
+        title: 'Remix Failed', 
+        description: e?.message || 'Failed to generate remix. Please try again.', 
+        variant: 'destructive',
+        duration: 5000
+      });
+      
       setIsGenerating(false);
+      setGenerationStage("");
+      
+      if (pollIntervalRef.current) {
+        clearTimeout(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
     }
   };
 
@@ -321,28 +459,27 @@ export const RemixSongs = () => {
           </div>
         </div>
 
+        <Button 
+          onClick={handleOpenTitleDialog}
+          variant="collab" 
+          size="lg" 
+          className="w-full text-lg py-5"
+          disabled={isGenerating || !songA || !songB}
+        >
+          {isGenerating ? (
+            <>
+              <Shuffle className="w-5 h-5 animate-spin" />
+              Generating Remix...
+            </>
+          ) : (
+            <>
+              <Shuffle className="w-5 h-5" />
+              Remix with AI
+            </>
+          )}
+        </Button>
+
         <Dialog open={showTitleDialog} onOpenChange={setShowTitleDialog}>
-          <DialogTrigger asChild>
-            <Button 
-              onClick={handleOpenTitleDialog}
-              variant="collab" 
-              size="lg" 
-              className="w-full text-lg py-5" 
-              disabled={isGenerating || !songA || !songB}
-            >
-              {isGenerating ? (
-                <>
-                  <Shuffle className="w-5 h-5 animate-spin" />
-                  Generating Remix...
-                </>
-              ) : (
-                <>
-                  <Shuffle className="w-5 h-5" />
-                  Remix with AI
-                </>
-              )}
-            </Button>
-          </DialogTrigger>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle>Remix Title</DialogTitle>

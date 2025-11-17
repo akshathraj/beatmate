@@ -41,6 +41,7 @@ You are an expert music lyricist creating {genre} song lyrics. These lyrics will
 
 2. **Essential Structure:**
    - Use sections: [Intro], [Verse 1], [Chorus], [Verse 2], [Chorus], [Bridge], [Chorus], [Outro]
+   - CRITICAL: Keep total length under 2500 characters (MusicGPT limit is 3000)
    - Make the chorus catchy and repeatable
 
 3. **{genre} Genre Optimization:**
@@ -115,6 +116,7 @@ def mashup_lyrics(lyrics_a: str, lyrics_b: str, genre: str = "Pop", title: str =
    - Mix languages naturally if songs are in different languages
 
 3. **Structure (40-50 lines total):**
+   - CRITICAL: Keep total length under 2500 characters (MusicGPT limit is 3000)
    - [Intro] - Set the tone, can blend both songs' themes
    - [Verse 1] - Primarily from Song A with elements of Song B
    - [Chorus] - Blend the catchiest hooks from both songs

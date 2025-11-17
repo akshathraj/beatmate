@@ -49,13 +49,27 @@ def generate_song_from_lyrics(
     }
 
     response = requests.post(MUSICGPT_API_URL, headers=headers, json=payload)
-    resp_json = response.json()
-
+    
     print("=== MusicGPT Initial Response ===")
+    print(f"Status Code: {response.status_code}")
+    
+    # Handle error responses (400, 500, etc.)
+    if response.status_code != 200:
+        error_data = response.json() if response.content else {}
+        error_msg = error_data.get('detail') or error_data.get('message') or error_data.get('error') or 'Unknown error'
+        print(f"❌ MusicGPT API Error: {error_msg}")
+        print(f"Full response: {error_data}")
+        raise RuntimeError(f"MusicGPT API error ({response.status_code}): {error_msg}")
+    
+    resp_json = response.json()
     print(resp_json)
 
+    # Check if response indicates failure
     if not resp_json.get("success"):
-        raise RuntimeError(f"MusicGPT request failed: {resp_json}")
+        error_reason = resp_json.get('reason') or resp_json.get('detail') or resp_json.get('error') or 'Unknown error'
+        print(f"❌ MusicGPT request failed: {error_reason}")
+        print(f"Full response: {resp_json}")
+        raise RuntimeError(f"MusicGPT request failed: {error_reason}")
 
     return {
         "task_id": resp_json.get("task_id"),

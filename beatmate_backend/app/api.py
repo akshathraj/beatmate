@@ -86,12 +86,6 @@ async def musicgpt_webhook(request: Request):
     print(payload)
 
     try:
-        # Only process conversion_id_1 (first variant), ignore conversion_id_2
-        conversion_id = payload.get("conversion_id", "")
-        if "_2" in conversion_id or conversion_id.endswith("2"):
-            print(f"⏭️  Ignoring second variant (conversion_id: {conversion_id})")
-            return {"success": True, "message": "Second variant ignored"}
-        
         conversion_path = payload.get("conversion_path")
         # Prefer user-provided title saved earlier, fallback to provider title
         title = payload.get("title", "song")
@@ -164,14 +158,14 @@ async def musicgpt_webhook(request: Request):
             audio_bytes = r.content
 
             # Decide which filename to use: first save -> base, second -> _ignore, else skip
-            # Note: Should rarely reach second case due to conversion_id_2 early return above
             if not os.path.exists(base_path):
                 chosen_filename = base_filename
                 local_path = storage.local_save_file(audio_bytes, chosen_filename, folder_type='songs')
+                print(f"✅ Saved primary song: {chosen_filename}")
             elif not os.path.exists(alt_path):
                 chosen_filename = alt_filename
                 local_path = storage.local_save_file(audio_bytes, chosen_filename, folder_type='songs')
-                print(f"⚠️  Second variant saved as _ignore (shouldn't happen normally): {chosen_filename}")
+                print(f"✅ Saved second variant: {chosen_filename}")
             else:
                 # Already saved both variants for this title; ignore extra
                 print(f"⏭️  Both variants already exist, skipping")
@@ -179,7 +173,7 @@ async def musicgpt_webhook(request: Request):
 
             print(f"Saved song locally: {local_path}")
             
-            # Save album art if provided (MusicGPT sends it as image_path, image_url, or album_art)
+            # Save album art if provided
             try:
                 album_art_url = payload.get("image_path") or payload.get("album_art") or payload.get("image_url")
                 if album_art_url:
