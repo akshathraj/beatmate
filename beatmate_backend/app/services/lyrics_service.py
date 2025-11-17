@@ -66,20 +66,74 @@ You are an expert music lyricist creating {genre} song lyrics. These lyrics will
 Create lyrics that will sound amazing when performed!
 """
 
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=prompt_text
-    )
+    try:
+        print("🎵 Calling Gemini API for lyrics generation...")
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt_text
+        )
 
-    # Get the generated lyrics text and clean any markdown artifacts
-    lyrics = response.text.strip()
-    lyrics = clean_lyrics(lyrics)
+        # Get the generated lyrics text and clean any markdown artifacts
+        lyrics = response.text.strip()
+        lyrics = clean_lyrics(lyrics)
 
-    # Debug log
-    print("=== Gemini Generated Lyrics ===")
-    print(lyrics)
+        # Debug log
+        print("=== Gemini Generated Lyrics ===")
+        print(lyrics)
+        print("✅ Lyrics generation successful")
 
-    return lyrics
+        return lyrics
+    
+    except Exception as e:
+        error_type = type(e).__name__
+        error_msg = str(e)
+        
+        print("=" * 60)
+        print("❌ GEMINI API ERROR - Lyrics Generation")
+        print("=" * 60)
+        print(f"Error Type: {error_type}")
+        print(f"Error Message: {error_msg}")
+        
+        # Check for specific error types
+        if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg.upper() or "quota" in error_msg.lower():
+            print("⚠️  Rate Limit Exceeded:")
+            print("   - Gemini API quota exhausted")
+            print("   - Wait a few minutes or upgrade your API plan")
+            print("   - Consider implementing request throttling")
+            raise RuntimeError("Gemini API rate limit exceeded (429). Please wait a few minutes and try again.")
+        
+        elif "503" in error_msg or "UNAVAILABLE" in error_msg.upper() or "overloaded" in error_msg.lower():
+            print("⚠️  Service Unavailable (503):")
+            print("   - Gemini model is temporarily overloaded")
+            print("   - This is a Google server-side issue")
+            print("   - Wait 10-30 seconds and try again")
+            print("   - If persists, try switching to a different model")
+            print("=" * 60)
+            raise RuntimeError("Gemini API is temporarily overloaded (503). Please wait a moment and try again.")
+        
+        elif "500" in error_msg or "INTERNAL" in error_msg.upper():
+            print("⚠️  Internal Server Error (500):")
+            print("   - Gemini API internal error")
+            print("   - This is a temporary Google server issue")
+            print("   - Wait a few moments and try again")
+            print("=" * 60)
+            raise RuntimeError("Gemini API internal error (500). Please try again in a moment.")
+        
+        elif "403" in error_msg or "permission" in error_msg.lower():
+            print("⚠️  Permission Denied:")
+            print("   - Check your Gemini API key")
+            print("   - Verify API is enabled in Google Cloud Console")
+            raise RuntimeError("Gemini API permission denied. Check your API key.")
+        
+        elif "401" in error_msg or "unauthorized" in error_msg.lower():
+            print("⚠️  Unauthorized:")
+            print("   - Invalid or expired API key")
+            raise RuntimeError("Gemini API key is invalid or expired.")
+        
+        else:
+            print(f"⚠️  Unexpected Error: {error_msg}")
+            print("=" * 60)
+            raise RuntimeError(f"Gemini API error: {error_msg}")
 
 
 def mashup_lyrics(lyrics_a: str, lyrics_b: str, genre: str = "Pop", title: str = "Remix") -> str:
@@ -144,20 +198,74 @@ def mashup_lyrics(lyrics_a: str, lyrics_b: str, genre: str = "Pop", title: str =
 Create a mashup that feels professional, creative, and emotionally resonant!
 """
     
-    response = client.models.generate_content(
-        model="gemini-2.0-flash-exp",
-        contents=prompt_text
-    )
+    try:
+        print(f"🎵 Calling Gemini API for mashup generation: {title}")
+        response = client.models.generate_content(
+            model="gemini-2.0-flash-exp",
+            contents=prompt_text
+        )
+        
+        # Get mashup text and clean any markdown artifacts
+        mashup = response.text.strip()
+        mashup = clean_lyrics(mashup)
+        
+        # Debug log
+        print("=== Gemini Generated Mashup ===")
+        print(f"Title: {title}")
+        print(f"Genre: {genre}")
+        print(mashup)
+        print("✅ Mashup generation successful")
+        print("=" * 50)
+        
+        return mashup
     
-    # Get mashup text and clean any markdown artifacts
-    mashup = response.text.strip()
-    mashup = clean_lyrics(mashup)
-    
-    # Debug log
-    print("=== Gemini Generated Mashup ===")
-    print(f"Title: {title}")
-    print(f"Genre: {genre}")
-    print(mashup)
-    print("=" * 50)
-    
-    return mashup
+    except Exception as e:
+        error_type = type(e).__name__
+        error_msg = str(e)
+        
+        print("=" * 60)
+        print("❌ GEMINI API ERROR - Mashup Generation")
+        print("=" * 60)
+        print(f"Error Type: {error_type}")
+        print(f"Error Message: {error_msg}")
+        
+        # Check for specific error types
+        if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg.upper() or "quota" in error_msg.lower():
+            print("⚠️  Rate Limit Exceeded:")
+            print("   - Gemini API quota exhausted")
+            print("   - Wait a few minutes or upgrade your API plan")
+            print("   - Consider implementing request throttling")
+            raise RuntimeError("Gemini API rate limit exceeded (429). Please wait a few minutes and try again.")
+        
+        elif "503" in error_msg or "UNAVAILABLE" in error_msg.upper() or "overloaded" in error_msg.lower():
+            print("⚠️  Service Unavailable (503):")
+            print("   - Gemini model is temporarily overloaded")
+            print("   - This is a Google server-side issue")
+            print("   - Wait 10-30 seconds and try again")
+            print("   - If persists, try switching to a different model")
+            print("=" * 60)
+            raise RuntimeError("Gemini API is temporarily overloaded (503). Please wait a moment and try again.")
+        
+        elif "500" in error_msg or "INTERNAL" in error_msg.upper():
+            print("⚠️  Internal Server Error (500):")
+            print("   - Gemini API internal error")
+            print("   - This is a temporary Google server issue")
+            print("   - Wait a few moments and try again")
+            print("=" * 60)
+            raise RuntimeError("Gemini API internal error (500). Please try again in a moment.")
+        
+        elif "403" in error_msg or "permission" in error_msg.lower():
+            print("⚠️  Permission Denied:")
+            print("   - Check your Gemini API key")
+            print("   - Verify API is enabled in Google Cloud Console")
+            raise RuntimeError("Gemini API permission denied. Check your API key.")
+        
+        elif "401" in error_msg or "unauthorized" in error_msg.lower():
+            print("⚠️  Unauthorized:")
+            print("   - Invalid or expired API key")
+            raise RuntimeError("Gemini API key is invalid or expired.")
+        
+        else:
+            print(f"⚠️  Unexpected Error: {error_msg}")
+            print("=" * 60)
+            raise RuntimeError(f"Gemini API error: {error_msg}")

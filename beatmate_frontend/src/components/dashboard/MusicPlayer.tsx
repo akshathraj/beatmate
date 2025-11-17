@@ -276,7 +276,7 @@ export const MusicPlayer = () => {
             </div>
             <div>
               <h2 className="text-2xl font-bold text-foreground">Music Player</h2>
-              <p className="text-muted-foreground text-sm">Your playlist</p>
+              <p className="text-muted-foreground text-sm">Most recent creations</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
