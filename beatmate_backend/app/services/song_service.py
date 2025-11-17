@@ -20,33 +20,34 @@ def generate_song_from_lyrics(
         "Content-Type": "application/json"
     }
 
+    # Voice instructions for prompt (MusicGPT interprets voice from prompt)
     voice_instruction = {
         "male": "with male vocals",
         "female": "with female vocals",
-        "duet": "as a duet with both male and female vocals",
+        "duet": "as a duet with both male and female vocals singing together",
     }
 
     prompt = f"Create a {genre} style song {voice_instruction.get(voice_type, 'with male vocals')} based on the following lyrics."
     if title:
         prompt += f" Title: {title}"
 
-    voice_config = {
-        "male": {"make_instrumental": False, "vocal_only": False, "voice_id": ""},
-        "female": {"make_instrumental": False, "vocal_only": False, "voice_id": "female"},
-        "duet": {"make_instrumental": False, "vocal_only": False, "voice_id": "duet"},
-    }
-    config_values = voice_config.get(voice_type, voice_config["male"])
-
+    # MusicGPT parameters - voice is specified in prompt, not as separate parameter
+    # Using make_instrumental=False ensures vocals are generated
     payload = {
         "prompt": prompt,
         "music_style": genre,
         "lyrics": lyrics,
-        "make_instrumental": config_values["make_instrumental"],
-        "vocal_only": config_values["vocal_only"],
-        "voice_id": config_values["voice_id"],
+        "make_instrumental": False,  # Always generate vocals
+        "vocal_only": False,          # Generate full song with instruments
         "webhook_url": config.MUSICGPT_WEBHOOK_URL,
         "duration": duration,
     }
+
+    print("=== MusicGPT Request ===")
+    print(f"Voice Type: {voice_type}")
+    print(f"Prompt: {prompt}")
+    print(f"Payload keys: {list(payload.keys())}")
+    print(f"=" * 50)
 
     response = requests.post(MUSICGPT_API_URL, headers=headers, json=payload)
     

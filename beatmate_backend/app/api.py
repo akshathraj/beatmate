@@ -32,7 +32,7 @@ def generate_song(req: GenerateRequest):
 
         # Generate song (async task)
         music_task = song_service.generate_song_from_lyrics(
-            complete_lyrics, req.genre, title=req.title
+            complete_lyrics, req.genre, title=req.title, voice_type=req.voiceType
         )
 
         # Persist user-provided data temporarily in temp/ folder for webhook lookup
