@@ -10,6 +10,15 @@ __pycache__/
 venv/
 .DS_Store
 
+# Temporary metadata files
+beatmate_backend/temp/
+
+# Generates songs, lyrics, videos, album art
+beatmate_backend/files/songs
+beatmate_backend/files/lyrics
+beatmate_backend/files/videos
+beatmate_backend/files/album_art
+
 # --- Node / Frontend ---
 node_modules/
 dist/

@@ -9,7 +9,7 @@ import { Wand2, Music, Play, Pause, Download, Mic, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const genres = [
-  "Pop", "Hip Hop", "EDM", "Acoustic", "Rock", "Jazz", "Classical", "R&B", "Country", "Alternative"
+  "Pop", "Hip Hop", "EDM", "Romantic", "Lofi", "Patriotic", "Acoustic", "Rock", "Jazz", "Classical", "Country", "Alternative", "R&B", "Custom"
 ];
 
 const voiceOptions = [
@@ -21,6 +21,7 @@ const voiceOptions = [
 export const SongGenerator = () => {
   const [lyrics, setLyrics] = useState("");
   const [genre, setGenre] = useState("");
+  const [customGenre, setCustomGenre] = useState("");
   const [title, setTitle] = useState("");
   const [voiceType, setVoiceType] = useState("male");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -159,6 +160,15 @@ export const SongGenerator = () => {
       return;
     }
 
+    if (genre === "custom" && !customGenre.trim()) {
+      toast({
+        title: "Missing custom genre",
+        description: "Please enter your custom genre.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!title.trim()) {
       toast({
         title: "Missing title",
@@ -187,7 +197,7 @@ export const SongGenerator = () => {
         },
         body: JSON.stringify({ 
           lyrics, 
-          genre, 
+          genre: genre === "custom" ? customGenre : genre, 
           duration: 60, // Fixed duration
           title: title,
           voiceType: voiceType
@@ -437,18 +447,49 @@ Example: 'A sad love ballad with piano and strings about lost memories'`}
               <label className="text-sm font-medium text-foreground mb-2 block">
                 Genre
               </label>
-              <Select value={genre} onValueChange={setGenre}>
-                <SelectTrigger className="bg-input/50 border-border/50">
-                  <SelectValue placeholder="Select a genre" />
-                </SelectTrigger>
-                <SelectContent className="bg-popover border-border/50">
-                  {genres.map((g) => (
-                    <SelectItem key={g} value={g.toLowerCase()}>
-                      {g}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {genre === "custom" ? (
+                <div className="relative flex items-center">
+                  <Input
+                    placeholder="Enter custom genre"
+                    value={customGenre}
+                    onChange={(e) => setCustomGenre(e.target.value)}
+                    className="bg-input/50 border-border/50 pr-10"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setGenre("");
+                      setCustomGenre("");
+                    }}
+                    className="absolute right-0 h-full px-3 hover:bg-transparent"
+                    title="Choose different genre"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                  </Button>
+                </div>
+              ) : (
+                <Select value={genre} onValueChange={(value) => {
+                  setGenre(value);
+                  if (value !== "custom") {
+                    setCustomGenre("");
+                  }
+                }}>
+                  <SelectTrigger className="bg-input/50 border-border/50">
+                    <SelectValue placeholder="Select a genre" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover border-border/50">
+                    {genres.map((g) => (
+                      <SelectItem key={g} value={g.toLowerCase()}>
+                        {g}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
             <div>

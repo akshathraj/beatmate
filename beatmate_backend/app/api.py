@@ -35,17 +35,17 @@ def generate_song(req: GenerateRequest):
             complete_lyrics, req.genre, title=req.title
         )
 
-        # Persist user-provided data temporarily keyed by task id for later association in webhook
+        # Persist user-provided data temporarily in temp/ folder for webhook lookup
         try:
-            files_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'files')
-            os.makedirs(files_dir, exist_ok=True)
+            temp_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'temp')
+            os.makedirs(temp_dir, exist_ok=True)
             task_id = music_task.get('task_id')
             if task_id:
-                temp_path = os.path.join(files_dir, f"task_{task_id}.user.txt")
-                with open(temp_path, 'w', encoding='utf-8') as f:
+                temp_lyrics_path = os.path.join(temp_dir, f"task_{task_id}.user.txt")
+                with open(temp_lyrics_path, 'w', encoding='utf-8') as f:
                     f.write(req.lyrics or '')
                 # Save meta (title) so webhook can use user title instead of provider's
-                meta_path = os.path.join(files_dir, f"task_{task_id}.meta.json")
+                meta_path = os.path.join(temp_dir, f"task_{task_id}.meta.json")
                 with open(meta_path, 'w', encoding='utf-8') as f:
                     json.dump({
                         "title": (req.title or "song"),
@@ -55,10 +55,10 @@ def generate_song(req: GenerateRequest):
                 conv1 = (music_task.get('conversion_id_1') or '').strip()
                 conv2 = (music_task.get('conversion_id_2') or '').strip()
                 if conv1:
-                    with open(os.path.join(files_dir, f"conv_{conv1}.meta.json"), 'w', encoding='utf-8') as f:
+                    with open(os.path.join(temp_dir, f"conv_{conv1}.meta.json"), 'w', encoding='utf-8') as f:
                         json.dump({"title": (req.title or "song")}, f)
                 if conv2:
-                    with open(os.path.join(files_dir, f"conv_{conv2}.meta.json"), 'w', encoding='utf-8') as f:
+                    with open(os.path.join(temp_dir, f"conv_{conv2}.meta.json"), 'w', encoding='utf-8') as f:
                         json.dump({"title": (req.title or "song")}, f)
         except Exception as se:
             print(f"Could not save temp user lyrics: {se}")
@@ -86,14 +86,50 @@ async def musicgpt_webhook(request: Request):
     print(payload)
 
     try:
+        # Check for MusicGPT failure webhook (success: False)
+        if not payload.get("success", True):
+            print(f"❌ MusicGPT generation FAILED")
+            failure_reason = payload.get("reason") or "Unknown error"
+            print(f"   Reason: {failure_reason}")
+            
+            # Cleanup metadata for failed generations
+            try:
+                task_id = payload.get('task_id')
+                if task_id:
+                    temp_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'temp')
+                    
+                    # Remove task metadata
+                    meta_path = os.path.join(temp_dir, f"task_{task_id}.meta.json")
+                    if os.path.exists(meta_path):
+                        os.remove(meta_path)
+                        print(f"🗑️  Deleted failed task metadata: task_{task_id}.meta.json")
+                    
+                    # Remove temp user lyrics
+                    temp_lyrics = os.path.join(temp_dir, f"task_{task_id}.user.txt")
+                    if os.path.exists(temp_lyrics):
+                        os.remove(temp_lyrics)
+                        print(f"🗑️  Deleted temp lyrics: task_{task_id}.user.txt")
+                    
+                    # Remove ALL conversion metadata for this task
+                    conv_id = payload.get('conversion_id')
+                    if conv_id:
+                        conv_meta_path = os.path.join(temp_dir, f"conv_{conv_id}.meta.json")
+                        if os.path.exists(conv_meta_path):
+                            os.remove(conv_meta_path)
+                            print(f"🗑️  Deleted conversion metadata: conv_{conv_id}.meta.json")
+            except Exception as e:
+                print(f"⚠️  Cleanup failed: {e}")
+            
+            return {"success": False, "message": "Generation failed", "reason": failure_reason}
+        
         conversion_path = payload.get("conversion_path")
         # Prefer user-provided title saved earlier, fallback to provider title
         title = payload.get("title", "song")
         try:
-            files_dir_meta = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'files')
+            temp_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'temp')
             task_id_meta = payload.get('task_id') or payload.get('conversion_task_id')
             if task_id_meta:
-                meta_path = os.path.join(files_dir_meta, f"task_{task_id_meta}.meta.json")
+                meta_path = os.path.join(temp_dir, f"task_{task_id_meta}.meta.json")
                 if os.path.exists(meta_path):
                     with open(meta_path, 'r', encoding='utf-8') as mf:
                         meta = json.load(mf)
@@ -104,7 +140,7 @@ async def musicgpt_webhook(request: Request):
             if not title or title == payload.get('title'):
                 conv_id_meta = payload.get('conversion_id') or ''
                 if conv_id_meta:
-                    conv_meta_path = os.path.join(files_dir_meta, f"conv_{conv_id_meta}.meta.json")
+                    conv_meta_path = os.path.join(temp_dir, f"conv_{conv_id_meta}.meta.json")
                     if os.path.exists(conv_meta_path):
                         with open(conv_meta_path, 'r', encoding='utf-8') as mf:
                             meta = json.load(mf)
@@ -191,34 +227,44 @@ async def musicgpt_webhook(request: Request):
             try:
                 task_id = payload.get('task_id') or payload.get('conversion_task_id')
                 if task_id:
-                    files_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'files')
-                    temp_path = os.path.join(files_dir, f"task_{task_id}.user.txt")
-                    if os.path.exists(temp_path):
+                    temp_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'temp')
+                    temp_lyrics_path = os.path.join(temp_dir, f"task_{task_id}.user.txt")
+                    if os.path.exists(temp_lyrics_path):
                         base_no_ext = os.path.splitext(os.path.basename(local_path))[0]
                         lyrics_folder = storage.get_folder_path('lyrics')
                         lyrics_path = os.path.join(lyrics_folder, f"{base_no_ext}.txt")
-                        os.replace(temp_path, lyrics_path)
+                        os.replace(temp_lyrics_path, lyrics_path)
                         print(f"✅ Promoted user lyrics to: {lyrics_path}")
-                        # Cleanup meta files for this task and its conversions
-                        meta_path = os.path.join(files_dir, f"task_{task_id}.meta.json")
-                        try:
-                            if os.path.exists(meta_path):
-                                os.remove(meta_path)
-                                print(f"🗑️  Deleted task metadata: task_{task_id}.meta.json")
-                        except Exception as e:
-                            print(f"⚠️  Failed to delete task metadata: {e}")
-                        # Remove conversion-indexed meta if present
-                        try:
-                            conv_id = payload.get('conversion_id') or ''
-                            if conv_id:
-                                conv_meta_path = os.path.join(files_dir, f"conv_{conv_id}.meta.json")
-                                if os.path.exists(conv_meta_path):
-                                    os.remove(conv_meta_path)
-                                    print(f"🗑️  Deleted conversion metadata: conv_{conv_id}.meta.json")
-                        except Exception as e:
-                            print(f"⚠️  Failed to delete conversion metadata: {e}")
             except Exception as le:
                 print(f"Could not promote user lyrics to final file: {le}")
+            
+            # Always cleanup metadata files ONLY after 2nd variant (_ignore) is saved
+            # This ensures both songs can use the metadata before cleanup
+            try:
+                task_id = payload.get('task_id') or payload.get('conversion_task_id')
+                conv_id = payload.get('conversion_id') or ''
+                
+                if task_id and conv_id:
+                    temp_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'temp')
+                    
+                    # Check if this is the _ignore variant (second webhook)
+                    if chosen_filename == alt_filename:
+                        # This is the 2nd variant - safe to cleanup all metadata now
+                        meta_path = os.path.join(temp_dir, f"task_{task_id}.meta.json")
+                        if os.path.exists(meta_path):
+                            os.remove(meta_path)
+                            print(f"🗑️  Deleted task metadata: task_{task_id}.meta.json")
+                        
+                        # Cleanup ALL conversion metadata files
+                        import glob as glob_module
+                        for meta_file in glob_module.glob(os.path.join(temp_dir, "conv_*.meta.json")):
+                            try:
+                                os.remove(meta_file)
+                                print(f"🗑️  Deleted conversion metadata: {os.path.basename(meta_file)}")
+                            except Exception as e:
+                                print(f"⚠️  Failed to delete {meta_file}: {e}")
+            except Exception as e:
+                print(f"⚠️  Metadata cleanup error: {e}")
             # Try to save lyrics to lyrics folder (for future remixing)
             # Skip saving for _ignore variants to avoid duplicates
             try:
@@ -307,13 +353,14 @@ def remix_songs(req: RemixRequest):
             mashup, req.genre, title=req.title, duration=60, voice_type=req.voiceType
         )
         
-        # Save metadata so webhook can use the correct title
+        # Save metadata to temp/ folder so webhook can use the correct title
         try:
-            files_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'files')
+            temp_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'temp')
+            os.makedirs(temp_dir, exist_ok=True)
             task_id = music_task.get('task_id')
             if task_id:
                 # Save meta (title) so webhook can use user title instead of provider's
-                meta_path = os.path.join(files_dir, f"task_{task_id}.meta.json")
+                meta_path = os.path.join(temp_dir, f"task_{task_id}.meta.json")
                 with open(meta_path, 'w', encoding='utf-8') as f:
                     json.dump({
                         "title": req.title,
@@ -325,10 +372,10 @@ def remix_songs(req: RemixRequest):
                 conv1 = (music_task.get('conversion_id_1') or '').strip()
                 conv2 = (music_task.get('conversion_id_2') or '').strip()
                 if conv1:
-                    with open(os.path.join(files_dir, f"conv_{conv1}.meta.json"), 'w', encoding='utf-8') as f:
+                    with open(os.path.join(temp_dir, f"conv_{conv1}.meta.json"), 'w', encoding='utf-8') as f:
                         json.dump({"title": req.title}, f)
                 if conv2:
-                    with open(os.path.join(files_dir, f"conv_{conv2}.meta.json"), 'w', encoding='utf-8') as f:
+                    with open(os.path.join(temp_dir, f"conv_{conv2}.meta.json"), 'w', encoding='utf-8') as f:
                         json.dump({"title": req.title}, f)
         except Exception as se:
             print(f"⚠️ Could not save remix metadata: {se}")
