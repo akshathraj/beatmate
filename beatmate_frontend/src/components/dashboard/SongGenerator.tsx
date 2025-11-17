@@ -9,7 +9,7 @@ import { Wand2, Music, Play, Pause, Download, Mic, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const genres = [
-  "Pop", "Hip Hop", "EDM", "Acoustic", "Rock", "Jazz", "Classical", "R&B", "Country", "Alternative"
+  "Pop", "Hip Hop", "EDM", "Romantic", "Lofi", "Patriotic", "Acoustic", "Rock", "Jazz", "Classical", "Country", "Alternative", "R&B", "Custom"
 ];
 
 const voiceOptions = [
@@ -21,9 +21,11 @@ const voiceOptions = [
 export const SongGenerator = () => {
   const [lyrics, setLyrics] = useState("");
   const [genre, setGenre] = useState("");
+  const [customGenre, setCustomGenre] = useState("");
   const [title, setTitle] = useState("");
   const [voiceType, setVoiceType] = useState("male");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generationStage, setGenerationStage] = useState<string>("");
   const [generatedSong, setGeneratedSong] = useState<string | null>(null);
   const [songUrl, setSongUrl] = useState<string | null>(null);
   const [requestStartEpoch, setRequestStartEpoch] = useState<number | null>(null);
@@ -32,8 +34,11 @@ export const SongGenerator = () => {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [waveHeights, setWaveHeights] = useState<number[]>(Array.from({ length: 16 }, () => 10));
+  const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const waveTimerRef = useRef<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const pollIntervalRef = useRef<number | null>(null);
+  const cooldownTimerRef = useRef<number | null>(null);
   const { toast } = useToast();
 
   // Attach audio listeners for progress/duration when a song URL is set
@@ -69,6 +74,73 @@ export const SongGenerator = () => {
     };
   }, [isPlaying]);
 
+  // Cleanup polling interval on unmount
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) {
+        clearTimeout(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+    };
+  }, []);
+
+  // Cleanup cooldown timer on unmount
+  useEffect(() => {
+    return () => {
+      if (cooldownTimerRef.current) {
+        clearInterval(cooldownTimerRef.current);
+        cooldownTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  // Start cooldown timer
+  const startCooldown = (seconds: number) => {
+    setCooldownSeconds(seconds);
+    
+    if (cooldownTimerRef.current) {
+      clearInterval(cooldownTimerRef.current);
+    }
+    
+    cooldownTimerRef.current = window.setInterval(() => {
+      setCooldownSeconds((prev) => {
+        if (prev <= 1) {
+          if (cooldownTimerRef.current) {
+            clearInterval(cooldownTimerRef.current);
+            cooldownTimerRef.current = null;
+          }
+          
+          // Notify user when cooldown ends
+          toast({
+            title: "✅ Ready!",
+            description: "You can now generate songs again!",
+            duration: 4000,
+          });
+          
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const handleButtonClick = () => {
+    // Show cooldown message if still in cooldown
+    if (cooldownSeconds > 0) {
+      toast({
+        title: "⏳ Please Wait",
+        description: "Your previous song is still being processed in the background. We'll notify you when you can generate another song.",
+        duration: 4000,
+      });
+      return;
+    }
+    
+    // Open dialog if not generating
+    if (!isGenerating) {
+      setIsDialogOpen(true);
+    }
+  };
+
   const handleGenerate = async () => {
     if (!lyrics.trim()) {
       toast({
@@ -88,6 +160,15 @@ export const SongGenerator = () => {
       return;
     }
 
+    if (genre === "custom" && !customGenre.trim()) {
+      toast({
+        title: "Missing custom genre",
+        description: "Please enter your custom genre.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!title.trim()) {
       toast({
         title: "Missing title",
@@ -101,6 +182,13 @@ export const SongGenerator = () => {
     setIsDialogOpen(false);
     setRequestStartEpoch(Date.now() / 1000);
     
+    // Show initial "request received" toast
+    toast({
+      title: "📨 Request Received",
+      description: "Processing your request...",
+      duration: 3000,
+    });
+    
     try {
       const response = await fetch('http://localhost:8000/api/generate-song', {
         method: 'POST',
@@ -109,7 +197,7 @@ export const SongGenerator = () => {
         },
         body: JSON.stringify({ 
           lyrics, 
-          genre, 
+          genre: genre === "custom" ? customGenre : genre, 
           duration: 60, // Fixed duration
           title: title,
           voiceType: voiceType
@@ -117,28 +205,44 @@ export const SongGenerator = () => {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        const errorDetail = errorData.detail || `HTTP ${response.status}`;
+        console.error('❌ Song generation failed:', errorDetail);
+        console.error('Full error:', errorData);
+        throw new Error(errorDetail);
       }
 
       const data = await response.json();
       
       setGeneratedSong(data.song_url);
+      setGenerationStage("");
+      
+      // Show "lyrics generated" toast
       toast({
-        title: "🎵 Song Generated!",
-        description: "Your AI-generated song is being processed. Check back in a few minutes.",
+        title: "✅ Lyrics Generated!",
+        description: "Song generation is now in progress. This usually takes 1-2 minutes.",
+        duration: 5000,
       });
 
       // Poll for the completed song
       checkForCompletedSong();
-    } catch (error) {
-      console.error('Error generating song:', error);
+    } catch (error: any) {
+      console.error('❌ Error generating song:', error);
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      });
+      
+      setIsGenerating(false);
+      setGenerationStage("");
+      
       toast({
         title: "Generation Error",
-        description: "Failed to generate song. Please try again.",
+        description: error.message || "Failed to start song generation. Please try again.",
         variant: "destructive",
+        duration: 5000,
       });
-    } finally {
-      setIsGenerating(false);
     }
   };
 
@@ -147,8 +251,19 @@ export const SongGenerator = () => {
     const intervalMs = 5000; // 5 seconds
     const maxAttempts = 60; // up to ~5 minutes
     
-    const poll = async () => {
-      try {
+      const poll = async () => {
+        try {
+          attempts++;
+          
+          // Show generic "still generating" toast every 30 seconds (every 6 attempts)
+          if (attempts > 0 && attempts % 6 === 0) {
+            toast({
+              title: "🎵 Still Generating...",
+              description: "Your song is being created. This usually takes 1-2 minutes.",
+              duration: 4000,
+            });
+          }
+        
         const response = await fetch('http://localhost:8000/api/songs');
         if (response.ok) {
           const data = await response.json();
@@ -168,36 +283,67 @@ export const SongGenerator = () => {
           if (matchingSong) {
             const url = `http://localhost:8000${matchingSong.download_url}`;
             setSongUrl(url);
-            // Notify other widgets (RecentSongs/MySongs) to refresh
+            setIsGenerating(false);
+            setGenerationStage("");
+            
+            // Clear any existing polling interval
+            if (pollIntervalRef.current) {
+              clearInterval(pollIntervalRef.current);
+              pollIntervalRef.current = null;
+            }
+            
+            // Start 35-second cooldown to allow MusicGPT to finish processing the 2nd variant
+            // This prevents "TOO MANY PARALLEL REQUESTS" errors (invisible to user)
+            startCooldown(35);
+            
+            // Notify other widgets (MusicPlayer/MySongs) to refresh
             window.dispatchEvent(new CustomEvent('song-generated'));
+            
             toast({
               title: "🎵 Song Ready!",
-              description: "Your song is now ready to play!",
+              description: `"${title}" is now ready to play!`,
+              duration: 5000,
             });
             return;
           }
         }
         
-        attempts++;
         if (attempts < maxAttempts) {
-          setTimeout(poll, intervalMs);
+          pollIntervalRef.current = window.setTimeout(poll, intervalMs);
         } else {
+          setIsGenerating(false);
+          setGenerationStage("");
+          
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
+          }
+          
           toast({
-            title: "⏰ Processing Taking Longer",
-            description: "Your song is still being processed. Please check 'My Songs' later.",
+            title: "⏰ Still Processing",
+            description: "Your song is taking longer than expected. Please check the music player or 'My Songs' in a few minutes.",
+            duration: 7000,
           });
         }
       } catch (error) {
         console.error('Error checking for completed song:', error);
-        attempts++;
+        
         if (attempts < maxAttempts) {
-          setTimeout(poll, intervalMs);
+          pollIntervalRef.current = window.setTimeout(poll, intervalMs);
+        } else {
+          setIsGenerating(false);
+          setGenerationStage("");
+          
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
+          }
         }
       }
     };
     
     // Start polling after short delay to allow backend to process
-    setTimeout(poll, intervalMs);
+    pollIntervalRef.current = window.setTimeout(poll, intervalMs);
   };
 
   const togglePlayback = () => {
@@ -301,18 +447,49 @@ Example: 'A sad love ballad with piano and strings about lost memories'`}
               <label className="text-sm font-medium text-foreground mb-2 block">
                 Genre
               </label>
-              <Select value={genre} onValueChange={setGenre}>
-                <SelectTrigger className="bg-input/50 border-border/50">
-                  <SelectValue placeholder="Select a genre" />
-                </SelectTrigger>
-                <SelectContent className="bg-popover border-border/50">
-                  {genres.map((g) => (
-                    <SelectItem key={g} value={g.toLowerCase()}>
-                      {g}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {genre === "custom" ? (
+                <div className="relative flex items-center">
+                  <Input
+                    placeholder="Enter custom genre"
+                    value={customGenre}
+                    onChange={(e) => setCustomGenre(e.target.value)}
+                    className="bg-input/50 border-border/50 pr-10"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setGenre("");
+                      setCustomGenre("");
+                    }}
+                    className="absolute right-0 h-full px-3 hover:bg-transparent"
+                    title="Choose different genre"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                  </Button>
+                </div>
+              ) : (
+                <Select value={genre} onValueChange={(value) => {
+                  setGenre(value);
+                  if (value !== "custom") {
+                    setCustomGenre("");
+                  }
+                }}>
+                  <SelectTrigger className="bg-input/50 border-border/50">
+                    <SelectValue placeholder="Select a genre" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover border-border/50">
+                    {genres.map((g) => (
+                      <SelectItem key={g} value={g.toLowerCase()}>
+                        {g}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
             <div>
@@ -347,27 +524,27 @@ Example: 'A sad love ballad with piano and strings about lost memories'`}
             </div>
           </div>
 
+          <Button
+            onClick={handleButtonClick}
+            disabled={isGenerating || !lyrics.trim() || !genre}
+            variant="hero"
+            size="lg"
+            className="w-full text-xl py-6"
+          >
+            {isGenerating ? (
+              <>
+                <Music className="w-6 h-6 animate-spin" />
+                Generating Your Song...
+              </>
+            ) : (
+              <>
+                <Wand2 className="w-6 h-6" />
+                Generate Song with AI
+              </>
+            )}
+          </Button>
+
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button
-                disabled={isGenerating || !lyrics.trim() || !genre}
-                variant="hero"
-                size="lg"
-                className="w-full text-xl py-6"
-              >
-                {isGenerating ? (
-                  <>
-                    <Music className="w-6 h-6 animate-spin" />
-                    Generating Your Song...
-                  </>
-                ) : (
-                  <>
-                    <Wand2 className="w-6 h-6" />
-                    Generate Song with AI
-                  </>
-                )}
-              </Button>
-            </DialogTrigger>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
                 <DialogTitle>Song Title</DialogTitle>
