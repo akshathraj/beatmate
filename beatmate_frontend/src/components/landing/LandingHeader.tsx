@@ -3,12 +3,15 @@ import { Button } from "@/components/ui/button";
 import LoginModal from "./LoginModal";
 import SignupModal from "./SignupModal";
 import OurTeamModal from "./OurTeamModal";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/lib/supabase";
 
 const LandingHeader = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isSignupOpen, setIsSignupOpen] = useState(false);
   const [isTeamOpen, setIsTeamOpen] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -17,6 +20,25 @@ const LandingHeader = () => {
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+
+  // Redirect to dashboard once authenticated (handles Google OAuth return)
+  useEffect(() => {
+    let isMounted = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (isMounted && data.session) {
+        navigate("/dashboard");
+      }
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        navigate("/dashboard");
+      }
+    });
+    return () => {
+      isMounted = false;
+      listener.subscription.unsubscribe();
+    };
+  }, [navigate]);
 
   const scrollToSection = (id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });

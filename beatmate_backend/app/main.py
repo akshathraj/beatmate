@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import router
+from app.api import router, ensure_queue_started
 
 app = FastAPI(title="BeatMate Backend")
 
@@ -14,3 +14,7 @@ app.add_middleware(
 )
 
 app.include_router(router, prefix="/api")
+
+@app.on_event("startup")
+async def _startup():
+    await ensure_queue_started()

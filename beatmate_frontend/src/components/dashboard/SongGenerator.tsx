@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { DashboardCard } from "./DashboardCard";
 import { Wand2, Music, Play, Pause, Download, Mic, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/lib/supabase";
 
 const genres = [
   "Pop", "Hip Hop", "EDM", "Acoustic", "Rock", "Jazz", "Classical", "R&B", "Country", "Alternative"
@@ -102,10 +103,12 @@ export const SongGenerator = () => {
     setRequestStartEpoch(Date.now() / 1000);
     
     try {
+      const { data: { session } } = await supabase.auth.getSession();
       const response = await fetch('http://localhost:8000/api/generate-song', {
         method: 'POST',
         headers: { 
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {})
         },
         body: JSON.stringify({ 
           lyrics, 
@@ -117,7 +120,12 @@ export const SongGenerator = () => {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        let detail = `HTTP ${response.status}`;
+        try {
+          const err = await response.json();
+          if (err?.detail) detail = err.detail;
+        } catch {}
+        throw new Error(detail);
       }
 
       const data = await response.json();
@@ -130,11 +138,13 @@ export const SongGenerator = () => {
 
       // Poll for the completed song
       checkForCompletedSong();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error generating song:', error);
       toast({
         title: "Generation Error",
-        description: "Failed to generate song. Please try again.",
+        description: String(error?.message || error) === "Provider rate limited: please wait ~30-60s and try again."
+          ? "The music provider is rate limiting. Please wait ~30-60s and try again."
+          : String(error?.message || "Failed to generate song. Please try again."),
         variant: "destructive",
       });
     } finally {

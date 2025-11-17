@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/lib/supabase";
 
 interface SignupModalProps {
   isOpen: boolean;
@@ -20,31 +21,19 @@ const SignupModal = ({ isOpen, onClose }: SignupModalProps) => {
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-
     if (password !== confirmPassword) {
-      toast({
-        title: "Error",
-        description: "Passwords don't match",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Passwords don't match", variant: "destructive" });
       setIsLoading(false);
       return;
     }
-
-    // Simulate signup process
-    setTimeout(() => {
-      toast({
-        title: "Welcome to BeatMate! 🎵",
-        description: "Your account has been created successfully. Start creating amazing music!",
-      });
-      
-      // Reset form and close modal
-      setEmail("");
-      setPassword("");
-      setConfirmPassword("");
+    const { error } = await supabase.auth.signUp({ email, password });
+    if (error) {
+      toast({ title: "Signup failed", description: error.message, variant: "destructive" });
       setIsLoading(false);
-      onClose();
-    }, 1500);
+      return;
+    }
+    toast({ title: "Check your email", description: "Confirm your address to complete signup" });
+    handleClose();
   };
 
   const handleClose = () => {
@@ -116,7 +105,7 @@ const SignupModal = ({ isOpen, onClose }: SignupModalProps) => {
               disabled={isLoading}
               className="flex-1 btn-hero"
             >
-              {isLoading ? "Creating Account..." : "Sign Up Free"}
+              {isLoading ? "Creating..." : "Sign Up Free"}
             </Button>
           </div>
         </form>

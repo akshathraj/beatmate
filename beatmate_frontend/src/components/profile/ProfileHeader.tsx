@@ -1,33 +1,76 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Camera, Mail, Phone, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { supabase } from "@/lib/supabase";
 
 const ProfileHeader = () => {
-  const [name, setName] = useState("Alex Rivers");
-  const [email, setEmail] = useState("alex.rivers@musicai.io");
-  const [phone, setPhone] = useState("+1 (555) 123-4567");
+  const [name, setName] = useState("Your Name");
+  const [email, setEmail] = useState("you@example.com");
+  const [phone, setPhone] = useState("");
   const [isEditingName, setIsEditingName] = useState(false);
   const [isEditingEmail, setIsEditingEmail] = useState(false);
   const [isEditingPhone, setIsEditingPhone] = useState(false);
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
+  const [avatarPath, setAvatarPath] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handlePhotoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  // Load Supabase user profile (from Google or email/pass)
+  useEffect(() => {
+    const loadUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const displayName = (user.user_metadata?.full_name as string) || (user.user_metadata?.name as string) || name;
+        const photo = (user.user_metadata?.avatar_url as string) || (user.user_metadata?.picture as string) || null;
+        setName(displayName || name);
+        setEmail(user.email || email);
+        // Try DB profile first
+        const { data: rows } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
+        if (rows) {
+          if (rows.display_name) setName(rows.display_name);
+          if (rows.phone) setPhone(rows.phone);
+          if (rows.avatar_path) {
+            setAvatarPath(rows.avatar_path);
+            const signed = await supabase.storage.from("avatars").createSignedUrl(rows.avatar_path, 60 * 60);
+            if (!signed.error) setProfilePhoto(signed.data.signedUrl);
+          }
+        } else {
+          // Seed a profile row for this user (upsert will create if not exists)
+          await supabase.from("profiles").upsert({ id: user.id, display_name: displayName || null }).select().single();
+        }
+        // Fallback to Google metadata photo if no stored avatar
+        if (!profilePhoto && photo) setProfilePhoto(photo);
+      }
+    };
+    loadUser();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handlePhotoChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       if (file.size > 5 * 1024 * 1024) {
         toast.error("Image size must be less than 5MB");
         return;
       }
-      
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setProfilePhoto(reader.result as string);
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          toast.error("Please login to update your profile photo");
+          return;
+        }
+        const path = `${user.id}/${Date.now()}_${file.name}`;
+        const { error: uploadErr } = await supabase.storage.from("avatars").upload(path, file, { upsert: true, contentType: file.type || "image/*" });
+        if (uploadErr) throw uploadErr;
+        setAvatarPath(path);
+        const signed = await supabase.storage.from("avatars").createSignedUrl(path, 60 * 60);
+        if (!signed.error) setProfilePhoto(signed.data.signedUrl);
+        await supabase.from("profiles").upsert({ id: user.id, avatar_path: path });
         toast.success("Profile photo updated!");
-      };
-      reader.readAsDataURL(file);
+      } catch (e: any) {
+        toast.error(e?.message || "Failed to upload photo");
+      }
     }
   };
 
@@ -35,8 +78,26 @@ const ProfileHeader = () => {
     fileInputRef.current?.click();
   };
 
-  const handleSave = (field: string) => {
-    toast.success(`${field} updated successfully!`);
+  const handleSave = async (field: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("Please login to save your profile");
+        return;
+      }
+      const payload: any = { id: user.id };
+      if (field === "Name") payload.display_name = name;
+      if (field === "Email") {
+        // Email is managed by Supabase Auth; keep display only
+        toast.info("Email comes from your sign-in provider");
+        return;
+      }
+      if (field === "Phone") payload.phone = phone;
+      await supabase.from("profiles").upsert(payload);
+      toast.success(`${field} updated successfully!`);
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to update profile");
+    }
   };
 
   return (

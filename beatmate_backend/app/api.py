@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form, Depends
 from fastapi.responses import FileResponse
 from app.models import GenerateRequest, GenerateResponse, RemixRequest
 from app.services import lyrics_service, song_service
@@ -7,72 +7,308 @@ import glob
 import json
 from app.services.video_service import generate_lyric_video_from_files
 from app.utils import storage
+from app.auth import get_current_user
+from app.config import supabase, SUPABASE_URL
+from app.utils.storage import upload_bytes, get_signed_url
+import uuid
+import time
+import httpx
+import os
+from typing import Dict, Any
+import asyncio
 
 router = APIRouter()
 
+# ---------- Minimal in-memory queue for generate-song ----------
+_job_queue: "asyncio.Queue[Dict[str, Any]]" = asyncio.Queue()
+_job_status: Dict[str, Dict[str, Any]] = {}
+_worker_started: bool = False
+
+async def _generate_worker():
+    global LAST_GENERATE_FINISHED_AT, _per_source_last
+    while True:
+        job = await _job_queue.get()
+        job_id = job.get("job_id")
+        _job_status[job_id] = {"status": "processing"}
+        try:
+            req: GenerateRequest = job["req"]
+            user_id_meta: str | None = job.get("user_id")
+            source_key: str = user_id_meta or (job.get("ip") or "unknown")
+
+            # Respect global and per-source cooldowns (sleep instead of rejecting)
+            now = time.time()
+            global_remaining = max(0, GLOBAL_BACKOFF_SECONDS - int(now - LAST_GENERATE_FINISHED_AT))
+            if global_remaining > 0:
+                await asyncio.sleep(global_remaining)
+            now = time.time()
+            per_remaining = max(0, PER_SOURCE_COOLDOWN_SECONDS - int(now - _per_source_last.get(source_key, 0.0)))
+            if per_remaining > 0:
+                await asyncio.sleep(per_remaining)
+
+            # Complete lyrics
+            complete_lyrics = lyrics_service.generate_complete_lyrics(req.lyrics, req.genre)
+            safe_title = storage.sanitize_title(req.title or "song")
+            lyrics_path = os.path.join(storage.get_folder_path('lyrics'), f"{safe_title}.txt")
+            with open(lyrics_path, 'w', encoding='utf-8') as f:
+                f.write(complete_lyrics)
+
+            # Call provider
+            music_task = song_service.generate_song_from_lyrics(
+                complete_lyrics, req.genre, title=req.title
+            )
+
+            # Persist meta for webhook (includes user_id so we can insert DB row)
+            try:
+                files_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'files')
+                os.makedirs(files_dir, exist_ok=True)
+                task_id = music_task.get('task_id')
+                if task_id:
+                    temp_path = os.path.join(files_dir, f"task_{task_id}.user.txt")
+                    with open(temp_path, 'w', encoding='utf-8') as f:
+                        f.write(req.lyrics or '')
+                    meta_path = os.path.join(files_dir, f"task_{task_id}.meta.json")
+                    with open(meta_path, 'w', encoding='utf-8') as f:
+                        json.dump({
+                            "title": (req.title or "song"),
+                            "complete_lyrics": complete_lyrics,
+                            "user_id": user_id_meta
+                        }, f)
+                    conv1 = (music_task.get('conversion_id_1') or '').strip()
+                    conv2 = (music_task.get('conversion_id_2') or '').strip()
+                    if conv1:
+                        with open(os.path.join(files_dir, f"conv_{conv1}.meta.json"), 'w', encoding='utf-8') as f:
+                            json.dump({"title": (req.title or "song")}, f)
+                    if conv2:
+                        with open(os.path.join(files_dir, f"conv_{conv2}.meta.json"), 'w', encoding='utf-8') as f:
+                            json.dump({"title": (req.title or "song")}, f)
+            except Exception as se:
+                print(f"Could not save temp user lyrics: {se}")
+
+            _job_status[job_id] = {
+                "status": "submitted",
+                "task_id": music_task.get("task_id"),
+                "conversion_id_1": music_task.get("conversion_id_1"),
+                "conversion_id_2": music_task.get("conversion_id_2"),
+            }
+        except Exception as e:
+            _job_status[job_id] = {"status": "error", "error": str(e)}
+        finally:
+            LAST_GENERATE_FINISHED_AT = time.time()
+            src = job.get("user_id") or job.get("ip") or "unknown"
+            _per_source_last[src] = time.time()
+            _job_queue.task_done()
+
+async def ensure_queue_started():
+    global _worker_started
+    if not _worker_started:
+        asyncio.create_task(_generate_worker())
+        _worker_started = True
+
+# Auth: return current user info
+@router.get("/auth/me")
+async def me(user=Depends(get_current_user)):
+    return user
+
+# --- Cooldowns to reduce provider rate limits ---
+# Small global backoff between any two requests (seconds)
+GLOBAL_BACKOFF_SECONDS: int = int(os.environ.get("GLOBAL_BACKOFF_SECONDS", "5"))
+LAST_GENERATE_FINISHED_AT: float = 0.0
+
+# Per-source (user or IP) cooldown (seconds). Override via env if needed.
+PER_SOURCE_COOLDOWN_SECONDS: int = int(os.environ.get("PER_SOURCE_COOLDOWN_SECONDS", "45"))
+_per_source_last: Dict[str, float] = {}
+
 # Step 1 + 2: Generate a song request (async)
 @router.post('/generate-song', response_model=GenerateResponse)
-def generate_song(req: GenerateRequest):
+async def generate_song(req: GenerateRequest, request: Request):
     try:
+        await ensure_queue_started()
+        # Determine user (optional) for ownership and cooldown key
+        user_id_meta = None
+        try:
+            auth = request.headers.get("Authorization", "")
+            if auth.startswith("Bearer "):
+                token = auth.split(" ", 1)[1]
+                client = httpx.Client(base_url=SUPABASE_URL, timeout=10.0)
+                try:
+                    r = client.get("/auth/v1/user", headers={"Authorization": f"Bearer {token}"})
+                    if r.status_code == 200:
+                        user_id_meta = (r.json() or {}).get("id")
+                finally:
+                    client.close()
+        except Exception:
+            user_id_meta = None
         # Check if title already exists
         if storage.check_title_exists(req.title or "song"):
             raise HTTPException(
                 status_code=400,
                 detail=f"Title '{req.title}' already exists. Please choose a different title."
             )
-        
-        # Complete lyrics using Gemini
-        complete_lyrics = lyrics_service.generate_complete_lyrics(req.lyrics, req.genre)
-        
-        # Save generated lyrics immediately to lyrics folder
-        safe_title = storage.sanitize_title(req.title or "song")
-        lyrics_path = os.path.join(storage.get_folder_path('lyrics'), f"{safe_title}.txt")
-        with open(lyrics_path, 'w', encoding='utf-8') as f:
-            f.write(complete_lyrics)
-
-        # Generate song (async task)
-        music_task = song_service.generate_song_from_lyrics(
-            complete_lyrics, req.genre, title=req.title
-        )
-
-        # Persist user-provided data temporarily keyed by task id for later association in webhook
-        try:
-            files_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'files')
-            os.makedirs(files_dir, exist_ok=True)
-            task_id = music_task.get('task_id')
-            if task_id:
-                temp_path = os.path.join(files_dir, f"task_{task_id}.user.txt")
-                with open(temp_path, 'w', encoding='utf-8') as f:
-                    f.write(req.lyrics or '')
-                # Save meta (title) so webhook can use user title instead of provider's
-                meta_path = os.path.join(files_dir, f"task_{task_id}.meta.json")
-                with open(meta_path, 'w', encoding='utf-8') as f:
-                    json.dump({
-                        "title": (req.title or "song"),
-                        "complete_lyrics": complete_lyrics
-                    }, f)
-                # Also index by conversion IDs so the webhook can resolve by either
-                conv1 = (music_task.get('conversion_id_1') or '').strip()
-                conv2 = (music_task.get('conversion_id_2') or '').strip()
-                if conv1:
-                    with open(os.path.join(files_dir, f"conv_{conv1}.meta.json"), 'w', encoding='utf-8') as f:
-                        json.dump({"title": (req.title or "song")}, f)
-                if conv2:
-                    with open(os.path.join(files_dir, f"conv_{conv2}.meta.json"), 'w', encoding='utf-8') as f:
-                        json.dump({"title": (req.title or "song")}, f)
-        except Exception as se:
-            print(f"Could not save temp user lyrics: {se}")
-
-        # Return task info
+        # Enqueue job
+        job_id = str(uuid.uuid4())
+        job = {
+            "job_id": job_id,
+            "req": req,
+            "user_id": user_id_meta,
+            "ip": request.client.host if request.client else None,
+        }
+        _job_status[job_id] = {"status": "queued"}
+        await _job_queue.put(job)
+        position = _job_queue.qsize()
+        # Return a placeholder response compatible with current UI
         return GenerateResponse(
-            song_url=f"MusicGPT task_id: {music_task['task_id']}",
-            local_path=f"Conversion IDs: {music_task['conversion_id_1']}, {music_task['conversion_id_2']}"
+            song_url=f"Queued job_id: {job_id}",
+            local_path=f"Queue position: {position}"
         )
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/queue/{job_id}")
+async def queue_status(job_id: str):
+    return _job_status.get(job_id, {"status": "unknown"})
+
+@router.get("/health/supabase")
+def supabase_health():
+    """
+    Returns the Supabase project the backend is using and a simple storage check.
+    """
+    try:
+        project_ref = None
+        if SUPABASE_URL and "https://" in SUPABASE_URL and ".supabase.co" in SUPABASE_URL:
+            try:
+                project_ref = SUPABASE_URL.split("https://", 1)[1].split(".supabase.co", 1)[0]
+            except Exception:
+                project_ref = None
+        info = {
+            "configured": bool(supabase),
+            "supabase_url": SUPABASE_URL,
+            "project_ref": project_ref,
+            "storage_list_ok": False,
+        }
+        if not supabase:
+            return info
+        try:
+            # Try listing 'songs/public' to verify storage access
+            supabase.storage.from_("songs").list("public")
+            info["storage_list_ok"] = True
+        except Exception as e:
+            info["storage_error"] = str(e)
+        return info
+    except Exception as e:
+        return {"configured": False, "error": str(e)}
+
+@router.get("/my-songs")
+async def my_songs(user=Depends(get_current_user)):
+    """
+    Returns the authenticated user's songs from Supabase DB with signed URLs.
+    """
+    try:
+        if not supabase:
+            raise HTTPException(status_code=500, detail="Supabase not configured")
+        user_id = user["id"]
+        # Fetch rows for this user
+        resp = supabase.table("songs").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
+        rows = resp.data or []
+        results = []
+        for row in rows:
+            storage_path = row.get("storage_path") or ""
+            album_art_path = row.get("album_art_path") or None
+            # Generate signed URLs
+            signed_url = None
+            art_url = None
+            try:
+                if storage_path:
+                    signed_url = get_signed_url("songs", storage_path, 3600)
+            except Exception:
+                signed_url = None
+            try:
+                if album_art_path:
+                    art_url = get_signed_url("album_art", album_art_path, 3600)
+            except Exception:
+                art_url = None
+            results.append({
+                "title": row.get("title"),
+                "created_at": row.get("created_at"),
+                "size": row.get("size_bytes"),
+                "download_url": signed_url,
+                "album_art_url": art_url,
+                "storage_path": storage_path,
+            })
+        return {"songs": results}
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/auth/resolve-username")
+async def resolve_username(payload: dict):
+    """
+    Resolve username -> email from profiles. If input looks like an email, return it directly.
+    Body: { "username": "<username or email>" }
+    """
+    try:
+        if not supabase:
+            raise HTTPException(status_code=500, detail="Supabase not configured")
+        username = (payload or {}).get("username", "").strip()
+        if not username:
+            raise HTTPException(status_code=400, detail="username is required")
+        # If user typed an email, just return it
+        if "@" in username:
+            return {"email": username}
+        # Lookup in profiles
+        resp = supabase.table("profiles").select("email").eq("username", username).limit(1).execute()
+        rows = resp.data or []
+        if not rows or not rows[0].get("email"):
+            raise HTTPException(status_code=404, detail="Username not found")
+        return {"email": rows[0]["email"]}
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/public-songs")
+async def public_songs():
+    """
+    Lists songs stored under the 'public/' prefix in Supabase Storage.
+    Useful for generations that happened while the user was not logged in.
+    """
+    try:
+        if not supabase:
+            raise HTTPException(status_code=500, detail="Supabase not configured")
+        # List objects in 'public' folder of 'songs' bucket
+        files = supabase.storage.from_("songs").list("public")
+        items = files or []
+        results = []
+        for f in items:
+            name = f.get("name") or ""
+            # Only .mp3 files
+            if not name.lower().endswith(".mp3"):
+                continue
+            storage_path = f"public/{name}"
+            try:
+                signed = get_signed_url("songs", storage_path, 3600)
+            except Exception:
+                signed = None
+            base = os.path.splitext(name)[0]
+            # Parse title from "<safe_title>__<uuid>"
+            title = base.split("__")[0] if "__" in base else base
+            results.append({
+                "filename": name,
+                "title": title,
+                "size": f.get("metadata", {}).get("size") if isinstance(f.get("metadata"), dict) else 0,
+                "created_at": None,
+                "download_url": signed or "",
+                "album_art_url": None,
+            })
+        # newest first by name timestamp if any (best-effort)
+        results.sort(key=lambda x: x.get("filename",""), reverse=True)
+        return {"songs": results}
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Step 3: Webhook endpoint to receive final mp3/audio
 @router.post('/webhook/musicgpt')
@@ -120,28 +356,79 @@ async def musicgpt_webhook(request: Request):
 
             # Sanitize title for filesystem
             safe_title = storage.sanitize_title(title)
-            base_filename = f"{safe_title}.mp3"
-            alt_filename = f"{safe_title}_ignore.mp3"
-
-            songs_folder = storage.get_folder_path('songs')
-            base_path = os.path.join(songs_folder, base_filename)
-            alt_path = os.path.join(songs_folder, alt_filename)
 
             r = requests.get(conversion_path)
             audio_bytes = r.content
 
-            # Decide which filename to use: first save -> base, second -> _ignore, else skip
-            if not os.path.exists(base_path):
-                chosen_filename = base_filename
-                local_path = storage.local_save_file(audio_bytes, chosen_filename, folder_type='songs')
-            elif not os.path.exists(alt_path):
-                chosen_filename = alt_filename
-                local_path = storage.local_save_file(audio_bytes, chosen_filename, folder_type='songs')
-            else:
-                # Already saved both variants for this title; ignore extra
-                return {"success": True}
+            # If Supabase configured, upload there; else save locally (legacy)
+            uploaded_storage_path = None
+            album_art_storage_path = None
+            if supabase:
+                try:
+                    # Try to recover user_id from saved meta
+                    files_dir_meta = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'files')
+                    task_id_meta = payload.get('task_id') or payload.get('conversion_task_id')
+                    user_id_saved = None
+                    if task_id_meta:
+                        meta_path = os.path.join(files_dir_meta, f"task_{task_id_meta}.meta.json")
+                        if os.path.exists(meta_path):
+                            with open(meta_path, 'r', encoding='utf-8') as mf:
+                                meta = json.load(mf)
+                                user_id_saved = (meta.get('user_id') or '').strip() or None
 
-            print(f"Saved song locally: {local_path}")
+                    # Upload song bytes
+                    song_uuid = str(uuid.uuid4())
+                    prefix = (user_id_saved or "public")
+                    file_base = f"{storage.sanitize_title(title)}__{song_uuid}"
+                    uploaded_storage_path = f"{prefix}/{file_base}.mp3"
+                    upload_bytes("songs", uploaded_storage_path, audio_bytes, content_type="audio/mpeg")
+                    print(f"✅ Uploaded song to Supabase: {uploaded_storage_path}")
+
+                    # Save album art if provided
+                    try:
+                        album_art_url = payload.get("album_art") or payload.get("image_url")
+                        if album_art_url:
+                            art_response = requests.get(album_art_url)
+                            if art_response.status_code == 200:
+                                album_art_storage_path = f"{prefix}/{file_base}.jpg"
+                                upload_bytes("album_art", album_art_storage_path, art_response.content, content_type="image/jpeg")
+                                print(f"✅ Uploaded album art: {album_art_storage_path}")
+                    except Exception as ae:
+                        print(f"Could not upload album art: {ae}")
+
+                    # Insert DB row if we have a user_id (RLS requires non-null)
+                    try:
+                        if user_id_saved:
+                            supabase.table("songs").insert({
+                                "user_id": user_id_saved,
+                                "title": safe_title,
+                                "storage_path": uploaded_storage_path,
+                                "album_art_path": album_art_storage_path,
+                                "size_bytes": len(audio_bytes)
+                            }).execute()
+                            print(f"✅ Inserted DB row for song: {safe_title}")
+                    except Exception as de:
+                        print(f"DB insert failed: {de}")
+                except Exception as ue:
+                    print(f"Supabase upload failed, falling back to local save: {ue}")
+                    uploaded_storage_path = None
+
+            if not uploaded_storage_path:
+                # Legacy local save path
+                base_filename = f"{safe_title}.mp3"
+                alt_filename = f"{safe_title}_ignore.mp3"
+                songs_folder = storage.get_folder_path('songs')
+                base_path = os.path.join(songs_folder, base_filename)
+                alt_path = os.path.join(songs_folder, alt_filename)
+                if not os.path.exists(base_path):
+                    chosen_filename = base_filename
+                    local_path = storage.local_save_file(audio_bytes, chosen_filename, folder_type='songs')
+                elif not os.path.exists(alt_path):
+                    chosen_filename = alt_filename
+                    local_path = storage.local_save_file(audio_bytes, chosen_filename, folder_type='songs')
+                else:
+                    return {"success": True}
+                print(f"Saved song locally: {local_path}")
             
             # Save album art if provided
             try:
@@ -155,18 +442,31 @@ async def musicgpt_webhook(request: Request):
             except Exception as ae:
                 print(f"Could not save album art: {ae}")
 
-            # If a temp user-lyrics file exists for this task, promote it to final .txt next to mp3
+            # If a temp user-lyrics file exists for this task, push to Supabase 'lyrics' (or promote locally)
             try:
                 task_id = payload.get('task_id') or payload.get('conversion_task_id')
                 if task_id:
                     files_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'files')
                     temp_path = os.path.join(files_dir, f"task_{task_id}.user.txt")
                     if os.path.exists(temp_path):
-                        base_no_ext = os.path.splitext(os.path.basename(local_path))[0]
-                        lyrics_folder = storage.get_folder_path('lyrics')
-                        lyrics_path = os.path.join(lyrics_folder, f"{base_no_ext}.txt")
-                        os.replace(temp_path, lyrics_path)
-                        print(f"✅ Promoted user lyrics to: {lyrics_path}")
+                        try:
+                            with open(temp_path, 'rb') as tf:
+                                lyrics_bytes = tf.read()
+                            if uploaded_storage_path and supabase:
+                                # Store next to the song prefix with same uuid
+                                prefix = "/".join(uploaded_storage_path.split("/")[:-1])
+                                file_base = os.path.splitext(os.path.basename(uploaded_storage_path))[0]
+                                lyrics_path_sb = f"{prefix}/{file_base}.txt"
+                                upload_bytes("lyrics", lyrics_path_sb, lyrics_bytes, content_type="text/plain; charset=utf-8")
+                                print(f"✅ Uploaded lyrics to Supabase: {lyrics_path_sb}")
+                            else:
+                                base_no_ext = os.path.splitext(os.path.basename(local_path))[0]
+                                lyrics_folder = storage.get_folder_path('lyrics')
+                                lyrics_path = os.path.join(lyrics_folder, f"{base_no_ext}.txt")
+                                os.replace(temp_path, lyrics_path)
+                                print(f"✅ Promoted user lyrics to: {lyrics_path}")
+                        except Exception as pe:
+                            print(f"Lyrics promotion failed: {pe}")
                         # Cleanup meta files for this task and its conversions
                         meta_path = os.path.join(files_dir, f"task_{task_id}.meta.json")
                         try:
@@ -187,8 +487,7 @@ async def musicgpt_webhook(request: Request):
                             print(f"⚠️  Failed to delete conversion metadata: {e}")
             except Exception as le:
                 print(f"Could not promote user lyrics to final file: {le}")
-            # Try to save lyrics to lyrics folder (for future remixing)
-            # Skip saving for _ignore variants to avoid duplicates
+            # Try to save lyrics to storage (or local) for future remixing
             try:
                 lyrics_text = payload.get("lyrics")
                 if not lyrics_text and payload.get("lyrics_timestamped"):
@@ -203,17 +502,26 @@ async def musicgpt_webhook(request: Request):
                     if isinstance(ts_list, list):
                         lyrics_text = "\n".join([item.get("text", "") for item in ts_list if isinstance(item, dict) and item.get("text")])
                 if lyrics_text:
-                    base_no_ext = os.path.splitext(os.path.basename(local_path))[0]
-                    
-                    # Skip saving lyrics for _ignore variants (they have same lyrics as primary)
-                    if not base_no_ext.endswith('_ignore'):
-                        lyrics_folder = storage.get_folder_path('lyrics')
-                        lyrics_path = os.path.join(lyrics_folder, f"{base_no_ext}.txt")
-                        with open(lyrics_path, 'w', encoding='utf-8') as f:
-                            f.write(lyrics_text)
-                        print(f"✅ Saved lyrics to: {lyrics_path}")
-                    else:
-                        print(f"⏭️  Skipped saving duplicate lyrics for _ignore variant")
+                    try:
+                        if uploaded_storage_path and supabase:
+                            prefix = "/".join(uploaded_storage_path.split("/")[:-1])
+                            file_base = os.path.splitext(os.path.basename(uploaded_storage_path))[0]
+                            lyrics_path_sb = f"{prefix}/{file_base}.txt"
+                            upload_bytes("lyrics", lyrics_path_sb, lyrics_text.encode("utf-8"), content_type="text/plain; charset=utf-8")
+                            print(f"✅ Uploaded lyrics text to: {lyrics_path_sb}")
+                        else:
+                            base_no_ext = os.path.splitext(os.path.basename(local_path))[0]
+                            # Skip saving lyrics for _ignore variants (they have same lyrics as primary)
+                            if not base_no_ext.endswith('_ignore'):
+                                lyrics_folder = storage.get_folder_path('lyrics')
+                                lyrics_path = os.path.join(lyrics_folder, f"{base_no_ext}.txt")
+                                with open(lyrics_path, 'w', encoding='utf-8') as f:
+                                    f.write(lyrics_text)
+                                print(f"✅ Saved lyrics to: {lyrics_path}")
+                            else:
+                                print(f"⏭️  Skipped saving duplicate lyrics for _ignore variant")
+                    except Exception as le2:
+                        print(f"⚠️ Could not store lyrics text: {le2}")
             except Exception as le:
                 print(f"⚠️ Could not save lyrics text: {le}")
         return {"success": True}
@@ -452,6 +760,7 @@ async def generate_lyric_video(
     lyrics: str = Form(None),
     audio_file: UploadFile = File(None),
     background_file: UploadFile = File(None),
+    user=Depends(get_current_user),
 ):
     """
     Generates a lyric video.
@@ -533,10 +842,31 @@ async def generate_lyric_video(
             import shutil
             shutil.move(result_path, final_video_path)
         
+        # If Supabase is not configured, return local file reference
+        if not supabase:
+            return {
+                "status": "success",
+                "video_path": final_video_path,
+                "video_url": f"/api/video/{video_filename}",
+                "title": title
+            }
+
+        # Upload to Supabase Storage and insert DB row
+        user_id = user["id"]
+        with open(final_video_path, "rb") as f:
+            video_bytes = f.read()
+        storage_path = f"{user_id}/{uuid.uuid4()}.mp4"
+        upload_bytes("videos", storage_path, video_bytes, content_type="video/mp4")
+        supabase.table("videos").insert({
+            "user_id": user_id,
+            "title": title,
+            "storage_path": storage_path
+        }).execute()
+        signed = get_signed_url("videos", storage_path, 3600)
         return {
             "status": "success",
-            "video_path": final_video_path,
-            "video_url": f"/api/video/{video_filename}",
+            "storage_path": storage_path,
+            "signed_url": signed,
             "title": title
         }
 
@@ -564,3 +894,25 @@ def get_video(filename: str):
         if isinstance(e, HTTPException):
             raise e
         raise HTTPException(status_code=500, detail=str(e))
+
+# Upload a user song and save metadata
+@router.post("/upload/song")
+async def upload_song(
+    title: str = Form(...),
+    audio_file: UploadFile = File(...),
+    user=Depends(get_current_user),
+):
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not configured")
+    user_id = user["id"]
+    data = await audio_file.read()
+    storage_path = f"{user_id}/{uuid.uuid4()}.mp3"
+    upload_bytes("songs", storage_path, data, content_type="audio/mpeg")
+    supabase.table("songs").insert({
+        "user_id": user_id,
+        "title": title,
+        "storage_path": storage_path,
+        "size_bytes": len(data)
+    }).execute()
+    url = get_signed_url("songs", storage_path, 3600)
+    return {"title": title, "path": storage_path, "url": url}

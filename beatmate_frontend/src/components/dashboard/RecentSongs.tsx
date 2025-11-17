@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Play, Download, Music2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { DashboardCard } from "./DashboardCard";
+import { supabase } from "@/lib/supabase";
 
 interface SongItem {
   filename: string;
@@ -25,10 +26,42 @@ export const RecentSongs = () => {
   const fetchSongs = async () => {
     try {
       setIsLoading(true);
-      const res = await fetch('http://localhost:8000/api/songs');
-      if (!res.ok) return;
-      const data = await res.json();
-      const list: SongItem[] = data.songs || [];
+      let list: SongItem[] = [];
+      // Try user-specific list from Supabase via backend
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        const resp = await fetch('http://localhost:8000/api/my-songs', {
+          headers: { Authorization: `Bearer ${session.access_token}` }
+        });
+        if (resp.ok) {
+          const json = await resp.json();
+          // Map to expected shape, synthesizing filename for UI keys
+          list = (json.songs || []).map((s: any) => ({
+            filename: s.storage_path?.split("/").pop() || (s.title || "song") + ".mp3",
+            title: s.title,
+            size: s.size || 0,
+            created_at: Date.parse(s.created_at || "") / 1000 || undefined,
+            download_url: s.download_url, // likely an absolute signed URL
+            album_art_url: s.album_art_url || undefined
+          }));
+        }
+      }
+      // Fallback to public Supabase songs (if not logged in)
+      if (list.length === 0) {
+        const res = await fetch('http://localhost:8000/api/public-songs');
+        if (res.ok) {
+          const data = await res.json();
+          list = (data.songs || []) as SongItem[];
+        }
+      }
+      // Fallback to local files listing
+      if (list.length === 0) {
+        const res = await fetch('http://localhost:8000/api/songs');
+        if (res.ok) {
+          const data = await res.json();
+          list = data.songs || [];
+        }
+      }
       // Take top 4 unique songs by filename/title
       const seen = new Set<string>();
       const unique: SongItem[] = [];
@@ -76,7 +109,8 @@ export const RecentSongs = () => {
     const audio = audioRef.current;
     if (!audio) return;
 
-    const url = `http://localhost:8000${song.download_url}`;
+    const isAbsolute = /^https?:\/\//i.test(song.download_url);
+    const url = isAbsolute ? song.download_url : `http://localhost:8000${song.download_url}`;
 
     // If clicking same song, toggle play/pause
     if (currentFile === song.filename) {
@@ -108,7 +142,8 @@ export const RecentSongs = () => {
 
   const download = (song: SongItem) => {
     const link = document.createElement('a');
-    link.href = `http://localhost:8000${song.download_url}`;
+    const isAbsolute = /^https?:\/\//i.test(song.download_url);
+    link.href = isAbsolute ? song.download_url : `http://localhost:8000${song.download_url}`;
     link.download = song.filename;
     document.body.appendChild(link);
     link.click();
@@ -145,7 +180,7 @@ export const RecentSongs = () => {
                 <div className="h-24 w-full flex items-center justify-center bg-gradient-songs/20 group-hover:bg-gradient-songs/30 transition-colors duration-300">
                   {song.album_art_url ? (
                     <img 
-                      src={`http://localhost:8000${song.album_art_url}`}
+                      src={/^https?:\/\//i.test(song.album_art_url) ? song.album_art_url : `http://localhost:8000${song.album_art_url}`}
                       alt={song.title || song.filename}
                       className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                     />

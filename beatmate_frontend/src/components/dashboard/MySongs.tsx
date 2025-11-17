@@ -4,6 +4,7 @@ import { DashboardCard } from "./DashboardCard";
 import { Music2, Play, Download, Heart, MoreHorizontal, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { MusicPlayerPopup } from "./MusicPlayerPopup";
+import { supabase } from "@/lib/supabase";
 
 interface Song {
   filename: string;
@@ -25,15 +26,52 @@ export const MySongs = () => {
   const fetchSongs = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch('http://localhost:8000/api/songs');
-      if (response.ok) {
-        const data = await response.json();
-        const songsWithLiked = data.songs.map((song: any) => ({
-          ...song,
-          liked: false, // Default to not liked
-          title: song.title || song.filename.replace('.mp3', '').replace(/_\d+$/g, '')
-        }));
-        setSongs(songsWithLiked);
+      let result: any[] = [];
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        const res = await fetch('http://localhost:8000/api/my-songs', {
+          headers: { Authorization: `Bearer ${session.access_token}` }
+        });
+        if (res.ok) {
+          const json = await res.json();
+          result = json.songs || [];
+          const mapped = result.map((s: any) => ({
+            filename: s.storage_path?.split("/").pop() || (s.title || "song") + ".mp3",
+            size: s.size || 0,
+            download_url: s.download_url, // may be absolute signed URL
+            title: s.title || "",
+            liked: false,
+          }));
+          setSongs(mapped);
+        } else {
+          setSongs([]);
+        }
+      } else {
+        const response = await fetch('http://localhost:8000/api/songs');
+        if (response.ok) {
+          const data = await response.json();
+          const songsWithLiked = data.songs.map((song: any) => ({
+            ...song,
+            liked: false,
+            title: song.title || song.filename.replace('.mp3', '').replace(/_\d+$/g, '')
+          }));
+          setSongs(songsWithLiked);
+        }
+        // As an extra fallback, try public Supabase songs
+        if (result.length === 0 && songs.length === 0) {
+          const res = await fetch('http://localhost:8000/api/public-songs');
+          if (res.ok) {
+            const json = await res.json();
+            const mapped = (json.songs || []).map((s: any) => ({
+              filename: s.filename,
+              size: s.size || 0,
+              download_url: s.download_url,
+              title: s.title || "",
+              liked: false,
+            }));
+            setSongs(mapped);
+          }
+        }
       }
     } catch (error) {
       console.error('Error fetching songs:', error);
@@ -96,7 +134,8 @@ export const MySongs = () => {
   };
 
   const downloadSong = (song: Song) => {
-    const downloadUrl = `http://localhost:8000${song.download_url}`;
+    const isAbsolute = /^https?:\/\//i.test(song.download_url as any);
+    const downloadUrl = isAbsolute ? (song.download_url as any) : `http://localhost:8000${song.download_url}`;
     const link = document.createElement('a');
     link.href = downloadUrl;
     link.download = song.filename;
@@ -204,7 +243,7 @@ export const MySongs = () => {
       {currentSong && (
         <audio
           ref={audioRef}
-          src={`http://localhost:8000${currentSong.download_url}`}
+          src={/^https?:\/\//i.test(currentSong.download_url as any) ? (currentSong.download_url as any) : `http://localhost:8000${currentSong.download_url}`}
           onEnded={() => setIsPlaying(false)}
           onPause={() => setIsPlaying(false)}
           onPlay={() => setIsPlaying(true)}
@@ -220,7 +259,7 @@ export const MySongs = () => {
             setIsPlaying(false);
           }
         }}
-        songUrl={currentSong ? `http://localhost:8000${currentSong.download_url}` : ""}
+        songUrl={currentSong ? (/^https?:\/\//i.test(currentSong.download_url as any) ? (currentSong.download_url as any) : `http://localhost:8000${currentSong.download_url}`) : ""}
         songTitle={currentSong?.title || "Generated Song"}
         isPlaying={isPlaying}
         onPlayPause={handlePlayPause}

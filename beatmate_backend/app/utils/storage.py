@@ -70,3 +70,48 @@ def sanitize_title(title):
 def get_folder_path(folder_type):
     """Get the absolute path for a folder type"""
     return FOLDERS.get(folder_type, BASE_DIR)
+
+# ---- Supabase storage helpers (optional; used when configured) ----
+import io
+import os
+import traceback
+from typing import Optional
+from app.config import supabase
+
+def upload_bytes(bucket: str, path: str, content: bytes, content_type: Optional[str] = None):
+    """
+    Uploads bytes to Supabase Storage.
+    """
+    if not supabase:
+        raise RuntimeError("Supabase client not configured")
+    debug = os.environ.get("SUPABASE_DEBUG", "false").lower() == "true"
+    # storage3 expects raw bytes or a file path string; pass bytes directly.
+    # Some versions require header values as strings; coerce upsert to "true".
+    file_opts = {
+        "contentType": (content_type or "application/octet-stream"),
+        "upsert": "true",
+    }
+    try:
+        if debug:
+            print(f"[SB-UPLOAD] bucket={bucket} path={path} bytes={len(content)} opts={file_opts}")
+        res = supabase.storage.from_(bucket).upload(
+            path=path,
+            file=content,
+            file_options=file_opts,
+        )
+        if debug:
+            print(f"[SB-UPLOAD:OK] bucket={bucket} path={path} res={res}")
+    except Exception as e:
+        print(f"[SB-UPLOAD:ERROR] bucket={bucket} path={path} type={type(e).__name__} msg={e}")
+        traceback.print_exc()
+        raise
+    return path
+
+def get_signed_url(bucket: str, path: str, expires_in: int = 3600) -> str:
+    """
+    Generates a signed URL for a storage object.
+    """
+    if not supabase:
+        raise RuntimeError("Supabase client not configured")
+    res = supabase.storage.from_(bucket).create_signed_url(path, expires_in)
+    return res.get("signedURL") or res.get("signed_url")

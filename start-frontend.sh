@@ -5,11 +5,8 @@ echo "🎨 Starting BeatMate Frontend..."
 
 cd beatmate_frontend
 
-# Check if node_modules exists
-if [ ! -d "node_modules" ]; then
-    echo "Installing dependencies..."
-    npm install
-fi
+echo "Installing dependencies..."
+npm install
 
 # Start the development server
 echo "🚀 Starting React dev server..."
