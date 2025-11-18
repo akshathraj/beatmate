@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { PostCard } from "@/components/community-social/PostCard";
 import { Layout } from "@/components/community-social/Layout";
-import { useUser } from "@/contexts/UserContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { Music } from "lucide-react";
 
 interface Post {
@@ -18,13 +18,18 @@ interface Post {
 }
 
 const MyUploads = () => {
-  const { user } = useUser();
+  const { user } = useAuth();
+  
+  // Get user display info
+  const userName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'User';
+  const userInitials = userName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  
   const [posts, setPosts] = useState<Post[]>([
     // Sample user posts
     {
       id: "1",
-      userName: user.name,
-      userAvatar: user.avatar,
+      userName,
+      userAvatar: userInitials,
       title: "My First Upload",
       fileType: "audio",
       timestamp: "3 days ago",

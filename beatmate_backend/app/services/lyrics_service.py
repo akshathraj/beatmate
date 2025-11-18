@@ -38,6 +38,7 @@ You are an expert music lyricist creating {genre} song lyrics. These lyrics will
    - If it's PARTIAL LYRICS → PRESERVE exactly as written, then expand naturally
    - If it's COMPLETE LYRICS → Keep all content, just add structure tags if missing
    - Generate lyrics in the language specified by the user or match the language of the provided lyrics
+   - CRITICAL: Always write lyrics using English/Latin alphabets only (Romanized), even for non-English languages
 
 2. **Essential Structure:**
    - Use sections: [Intro], [Verse 1], [Chorus], [Verse 2], [Chorus], [Bridge], [Chorus], [Outro]
@@ -168,6 +169,7 @@ def mashup_lyrics(lyrics_a: str, lyrics_b: str, genre: str = "Pop", title: str =
    - Create smooth transitions between different sections
    - You may create new connecting lines to bridge sections seamlessly
    - Mix languages naturally if songs are in different languages
+   - CRITICAL: Always write lyrics using English/Latin alphabets only (Romanized), even for non-English languages
 
 3. **Structure (40-50 lines total):**
    - CRITICAL: Keep total length under 2500 characters (MusicGPT limit is 3000)
@@ -201,7 +203,7 @@ Create a mashup that feels professional, creative, and emotionally resonant!
     try:
         print(f"🎵 Calling Gemini API for mashup generation: {title}")
         response = client.models.generate_content(
-            model="gemini-2.0-flash-exp",
+            model="gemini-2.5-flash-lite",
             contents=prompt_text
         )
         

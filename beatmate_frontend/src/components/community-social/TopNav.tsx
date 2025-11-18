@@ -2,13 +2,18 @@ import { Search, Music, ArrowLeft } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { NotificationDropdown } from "./NotificationDropdown";
-import { useUser } from "@/contexts/UserContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
 export const TopNav = () => {
-  const { user } = useUser();
+  const { user } = useAuth();
   const navigate = useNavigate();
+  
+  // Get user display info
+  const userName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'User';
+  const userInitials = userName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  const userPhoto = user?.user_metadata?.avatar_url || user?.user_metadata?.picture;
 
   return (
     <header className="fixed top-0 left-0 right-0 h-16 glass-card border-b border-border z-50 px-6">
@@ -50,11 +55,11 @@ export const TopNav = () => {
             className="cursor-pointer hover:ring-2 hover:ring-primary transition-all"
             onClick={() => navigate("/profile")}
           >
-            {user.photoUrl ? (
-              <AvatarImage src={user.photoUrl} />
+            {userPhoto ? (
+              <AvatarImage src={userPhoto} />
             ) : (
               <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-black font-bold">
-                {user.avatar}
+                {userInitials}
               </AvatarFallback>
             )}
           </Avatar>

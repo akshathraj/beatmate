@@ -3,7 +3,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Send, Trash2 } from "lucide-react";
-import { useUser } from "@/contexts/UserContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
 interface Comment {
@@ -21,9 +21,13 @@ interface CommentSectionProps {
 }
 
 export const CommentSection = ({ postId, initialComments = [] }: CommentSectionProps) => {
-  const { user } = useUser();
+  const { user } = useAuth();
   const [comments, setComments] = useState<Comment[]>(initialComments);
   const [newComment, setNewComment] = useState("");
+
+  // Get user display info
+  const userName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'User';
+  const userInitials = userName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
 
   const handleAddComment = () => {
     if (!newComment.trim()) {
@@ -38,8 +42,8 @@ export const CommentSection = ({ postId, initialComments = [] }: CommentSectionP
 
     const comment: Comment = {
       id: Date.now().toString(),
-      userName: user.name,
-      userAvatar: user.avatar,
+      userName,
+      userAvatar: userInitials,
       text: newComment.trim(),
       timestamp: "Just now",
       isOwner: true,
@@ -68,7 +72,7 @@ export const CommentSection = ({ postId, initialComments = [] }: CommentSectionP
       <div className="flex gap-3 mb-4">
         <Avatar className="w-8 h-8 border border-primary/30">
           <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-black text-xs font-bold">
-            {user.avatar}
+            {userInitials}
           </AvatarFallback>
         </Avatar>
         <div className="flex-1 flex gap-2">

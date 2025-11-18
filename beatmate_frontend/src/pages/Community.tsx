@@ -2,7 +2,7 @@ import { useState } from "react";
 import { PostComposer } from "@/components/community-social/PostComposer";
 import { PostCard } from "@/components/community-social/PostCard";
 import { Layout } from "@/components/community-social/Layout";
-import { useUser } from "@/contexts/UserContext";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface Post {
   id: string;
@@ -18,7 +18,7 @@ interface Post {
 }
 
 const Community = () => {
-  const { user } = useUser();
+  const { user } = useAuth();
   const [posts, setPosts] = useState<Post[]>([
     {
       id: "1",
@@ -62,10 +62,14 @@ const Community = () => {
       fileUrl = URL.createObjectURL(file);
     }
 
+    // Get user display name from metadata or email
+    const userName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'User';
+    const userInitials = userName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+
     const newPost: Post = {
       id: Date.now().toString(),
-      userName: user.name,
-      userAvatar: user.avatar,
+      userName,
+      userAvatar: userInitials,
       title,
       fileType: file?.type.startsWith("video/") ? "video" : "audio",
       fileUrl,
