@@ -2,15 +2,16 @@ import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Music, Upload, Play, Check } from "lucide-react";
+import { Music, Upload, Play, Check, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { songApi } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface Song {
   filename: string;
   title: string;
-  size: number;
-  created_at: number;
+  genre?: string;
+  created_at: string;
   download_url: string;
   album_art_url?: string;
 }
@@ -22,10 +23,13 @@ interface SongSelectionDialogProps {
 }
 
 export const SongSelectionDialog = ({ open, onOpenChange, onSelect }: SongSelectionDialogProps) => {
+  const { user } = useAuth();
   const [songs, setSongs] = useState<Song[]>([]);
   const [selectedSong, setSelectedSong] = useState<string | null>(null);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const { toast } = useToast();
+  
+  const userName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || "You";
 
   useEffect(() => {
     if (open) {
@@ -117,8 +121,10 @@ export const SongSelectionDialog = ({ open, onOpenChange, onSelect }: SongSelect
                   {/* Song Info */}
                   <div className="flex-1 text-left">
                     <div className="font-semibold">{song.title}</div>
-                    <div className="text-sm text-muted-foreground">
-                      {(song.size / (1024 * 1024)).toFixed(2)} MB
+                    <div className="text-sm text-muted-foreground flex items-center gap-1">
+                      <User className="w-3 h-3" />
+                      {userName}
+                      {song.genre && <span className="ml-2 capitalize">• {song.genre}</span>}
                     </div>
                   </div>
 
