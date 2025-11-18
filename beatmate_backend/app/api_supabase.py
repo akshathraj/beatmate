@@ -13,6 +13,7 @@ from app.utils import supabase_storage
 import os
 import json
 import tempfile
+import shutil
 from typing import Optional
 import requests
 
@@ -693,12 +694,21 @@ async def generate_lyric_video(
         )
         
         # Cleanup temp files
-        for tmp_file in [audio_path, lyrics_path, background_path, result_path]:
+        for tmp_file in [audio_path, lyrics_path, background_path]:
             if tmp_file and os.path.exists(tmp_file):
                 try:
                     os.remove(tmp_file)
                 except:
                     pass
+        
+        # Cleanup video temp directory (contains result_path)
+        if result_path and os.path.exists(result_path):
+            try:
+                video_tmpdir = os.path.dirname(result_path)
+                shutil.rmtree(video_tmpdir, ignore_errors=True)
+                print(f"✅ Cleaned up temp video directory")
+            except Exception as e:
+                print(f"⚠️ Could not cleanup video temp dir: {e}")
         
         return {
             "status": "success",
@@ -712,6 +722,30 @@ async def generate_lyric_video(
         import traceback
         error_trace = traceback.format_exc()
         print(f"❌ Video generation error: {error_trace}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get('/videos')
+async def list_videos(user: AuthUser = Depends(get_current_user)):
+    """
+    List all videos for the authenticated user
+    """
+    try:
+        supabase = get_supabase_service()
+        videos = supabase.get_user_videos(user.user_id)
+        
+        # Add public/signed URLs for each video
+        video_list = []
+        for video in videos:
+            video_url = supabase.get_public_url('user-videos', video['storage_path'])
+            video_list.append({
+                **video,
+                'video_url': video_url
+            })
+        
+        return {"videos": video_list}
+        
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -744,6 +778,42 @@ async def get_video(
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete('/videos/{video_id}')
+async def delete_video(
+    video_id: str,
+    user: AuthUser = Depends(get_current_user)
+):
+    """
+    Delete a video and its file from Supabase
+    """
+    try:
+        supabase = get_supabase_service()
+        
+        # Get video record to verify ownership
+        videos = supabase.get_user_videos(user.user_id)
+        video = next((v for v in videos if v['id'] == video_id), None)
+        
+        if not video:
+            raise HTTPException(status_code=404, detail="Video not found")
+        
+        # Delete video file from storage
+        if video.get('storage_path'):
+            try:
+                supabase.delete_file('user-videos', video['storage_path'])
+            except Exception as e:
+                print(f"Error deleting video file: {e}")
+        
+        # Delete database record
+        supabase.delete_video_record(video_id, user.user_id)
+        
+        return {"message": "Video deleted successfully", "video_id": video_id}
+        
+    except HTTPException as he:
+        raise he
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 

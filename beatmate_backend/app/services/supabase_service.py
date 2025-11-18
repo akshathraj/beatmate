@@ -52,8 +52,8 @@ class SupabaseService:
                 file_options=options
             )
             
-            # Get the public URL
-            public_url = self.client.storage.from_(bucket).get_public_url(file_path)
+            # Get the public URL (or signed URL for private buckets)
+            public_url = self.get_public_url(bucket, file_path)
             return public_url
         
         except Exception as e:

@@ -149,11 +149,29 @@ export const videoApi = {
   },
 
   /**
+   * Get all user videos
+   */
+  async getVideos() {
+    const response = await fetchWithAuth('/videos');
+    return response.json();
+  },
+
+  /**
    * Get a video by ID
    */
   async getVideo(videoId: string) {
     const response = await fetchWithAuth(`/video/${videoId}`);
     return response.blob();
+  },
+
+  /**
+   * Delete a video
+   */
+  async deleteVideo(videoId: string) {
+    const response = await fetchWithAuth(`/videos/${videoId}`, {
+      method: 'DELETE',
+    });
+    return response.json();
   },
 };
 

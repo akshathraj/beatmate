@@ -62,7 +62,8 @@ export const LyricVideoGenerator = () => {
       const data = await videoApi.generateLyricVideo(formData);
 
       if (data.status === "success") {
-        setVideoUrl(`http://localhost:8000${data.video_url}`);
+        // Use Supabase URL directly (already includes full URL)
+        setVideoUrl(data.video_url);
         toast({
           title: "🎬 Video Generated!",
           description: "Your lyric video is ready to play!",
