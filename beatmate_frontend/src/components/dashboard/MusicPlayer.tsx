@@ -3,6 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Play, Pause, Download, FileText, Music2, Volume2, SkipBack, SkipForward } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { DashboardCard } from "./DashboardCard";
+import { songApi } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface SongItem {
   filename: string;
@@ -14,6 +16,7 @@ interface SongItem {
 }
 
 export const MusicPlayer = () => {
+  const { user } = useAuth();
   const [songs, setSongs] = useState<SongItem[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -28,13 +31,14 @@ export const MusicPlayer = () => {
   const { toast } = useToast();
 
   const song = songs[currentIndex] || null;
+  
+  // Get user's display name
+  const userName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || "You";
 
   const fetchSongs = async () => {
     try {
       setIsLoading(true);
-      const res = await fetch('http://localhost:8000/api/songs');
-      if (!res.ok) return;
-      const data = await res.json();
+      const data = await songApi.getSongs();
       const list: SongItem[] = data.songs || [];
       setSongs(list);
       // Only reset index if it's out of bounds or if this is the initial load
@@ -55,6 +59,19 @@ export const MusicPlayer = () => {
   useEffect(() => {
     fetchSongs();
     
+    // Listen for song generation completion
+    const handleSongGenerated = () => {
+      fetchSongs();
+    };
+    
+    window.addEventListener('song-generated', handleSongGenerated);
+    
+    return () => {
+      window.removeEventListener('song-generated', handleSongGenerated);
+    };
+  }, []);
+
+  useEffect(() => {
     // Setup audio element
     const audio = new Audio();
     audioRef.current = audio;
@@ -101,7 +118,8 @@ export const MusicPlayer = () => {
 
   useEffect(() => {
     if (song && audioRef.current) {
-      const url = `http://localhost:8000${song.download_url}`;
+      // Use stream_url (direct Supabase URL) instead of download_url (which requires auth)
+      const url = (song as any).stream_url || `http://localhost:8000${song.download_url}`;
       const wasPlaying = isPlaying;
       
       setIsAudioReady(false);
@@ -207,29 +225,37 @@ export const MusicPlayer = () => {
     }
   };
 
-  const downloadSong = () => {
+  const downloadSong = async () => {
     if (!song) return;
-    const link = document.createElement('a');
-    link.href = `http://localhost:8000${song.download_url}`;
-    link.download = song.filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    toast({ title: 'Download Started', description: `Downloading ${song.title || song.filename}` });
+    try {
+      // Use the authenticated API to download
+      const blob = await songApi.downloadSong((song as any).id || song.filename);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = song.filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      toast({ title: 'Download Started', description: `Downloading ${song.title || song.filename}` });
+    } catch (error) {
+      toast({ 
+        title: 'Download Failed', 
+        description: 'Unable to download song', 
+        variant: 'destructive' 
+      });
+    }
   };
 
   const downloadLyrics = async () => {
     if (!song) return;
     
     try {
-      // Extract song name without extension and _ignore suffix (in case of legacy files)
-      let songName = (song.title || song.filename).replace('.mp3', '').replace('_ignore', '');
+      const songWithLyrics = song as any;
       
-      // Try to fetch from files/lyrics/ folder
-      const lyricsUrl = `http://localhost:8000/files/lyrics/${encodeURIComponent(songName)}.txt`;
-      
-      const res = await fetch(lyricsUrl);
-      if (!res.ok) {
+      // Check if lyrics URL is available
+      if (!songWithLyrics.lyrics_url) {
         toast({ 
           title: 'Lyrics Not Found', 
           description: 'No lyrics file available for this song.', 
@@ -237,14 +263,22 @@ export const MusicPlayer = () => {
         });
         return;
       }
+      
+      // Download from Supabase URL
+      const res = await fetch(songWithLyrics.lyrics_url);
+      if (!res.ok) {
+        throw new Error('Failed to fetch lyrics');
+      }
 
       const blob = await res.blob();
+      const songName = (song.title || song.filename).replace('.mp3', '');
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
-      link.download = `${songName}.txt`;
+      link.download = `${songName}_lyrics.txt`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
       
       toast({ title: 'Lyrics Downloaded', description: `Downloaded lyrics for ${songName}` });
     } catch (e) {
@@ -310,7 +344,7 @@ export const MusicPlayer = () => {
                     <div className={`relative w-24 h-24 rounded-xl overflow-hidden shadow-xl border-2 border-primary/30 transition-all duration-500 ${isPlaying ? 'scale-105 shadow-primary/50 border-primary/60' : ''}`}>
                       {song.album_art_url ? (
                         <img 
-                          src={`http://localhost:8000${song.album_art_url}`}
+                          src={song.album_art_url}
                           alt={song.title || song.filename}
                           className={`w-full h-full object-cover ${isPlaying ? 'scale-110' : ''} transition-transform duration-1000`}
                         />
@@ -350,7 +384,7 @@ export const MusicPlayer = () => {
                       </h3>
                       <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                         <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                        BeatMate AI
+                        {userName}
                       </p>
                     </div>
 

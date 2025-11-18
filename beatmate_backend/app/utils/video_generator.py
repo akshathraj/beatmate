@@ -246,17 +246,22 @@ def render_lyric_video(
             print(f"[Video Generator] Segment {segment_start:.1f}s: {lines}")
             
             # Create text clip with bold styling
-            txt_clip = TextClip(
-                multiline_text,
-                fontsize=fontsize,
-                font=selected_font,
-                color="white",
-                stroke_color="black",
-                stroke_width=6,  # Extra thick stroke for bold appearance
-                method="caption",
-                size=(int(resolution[0] * 0.85), None),  # 85% width for better margins
-                align="center"
-            ).set_start(segment_start).set_duration(segment_duration).set_position(("center", "center"))
+            try:
+                txt_clip = TextClip(
+                    multiline_text,
+                    fontsize=fontsize,
+                    font=selected_font,
+                    color="white",
+                    stroke_color="black",
+                    stroke_width=6,  # Extra thick stroke for bold appearance
+                    method="caption",
+                    size=(int(resolution[0] * 0.85), None),  # 85% width for better margins
+                    align="center"
+                ).set_start(segment_start).set_duration(segment_duration).set_position(("center", "center"))
+            except Exception as txt_error:
+                print(f"❌ TextClip error: {txt_error}")
+                print(f"   Font: {selected_font}, Text: {multiline_text[:50]}...")
+                raise RuntimeError(f"Failed to create text clip. Make sure ImageMagick is installed. Error: {txt_error}")
             
             # Add smooth fade in/out
             txt_clip = fadein(txt_clip, 0.3)

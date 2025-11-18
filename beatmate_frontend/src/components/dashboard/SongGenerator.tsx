@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { DashboardCard } from "./DashboardCard";
 import { Wand2, Music, Play, Pause, Download, Mic, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { songApi } from "@/lib/api";
 
 const genres = [
   "Pop", "Hip Hop", "EDM", "Romantic", "Lofi", "Patriotic", "Acoustic", "Rock", "Jazz", "Classical", "Country", "Alternative", "R&B", "Custom"
@@ -190,29 +191,13 @@ export const SongGenerator = () => {
     });
     
     try {
-      const response = await fetch('http://localhost:8000/api/generate-song', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ 
-          lyrics, 
-          genre: genre === "custom" ? customGenre : genre, 
-          duration: 60, // Fixed duration
-          title: title,
-          voiceType: voiceType
-        })
+      const data = await songApi.generateSong({
+        lyrics, 
+        genre: genre === "custom" ? customGenre : genre, 
+        duration: 60,
+        title: title,
+        voiceType: voiceType
       });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        const errorDetail = errorData.detail || `HTTP ${response.status}`;
-        console.error('❌ Song generation failed:', errorDetail);
-        console.error('Full error:', errorData);
-        throw new Error(errorDetail);
-      }
-
-      const data = await response.json();
       
       setGeneratedSong(data.song_url);
       setGenerationStage("");
@@ -227,13 +212,6 @@ export const SongGenerator = () => {
       // Poll for the completed song
       checkForCompletedSong();
     } catch (error: any) {
-      console.error('❌ Error generating song:', error);
-      console.error('Error details:', {
-        message: error.message,
-        stack: error.stack,
-        name: error.name
-      });
-      
       setIsGenerating(false);
       setGenerationStage("");
       
@@ -264,9 +242,8 @@ export const SongGenerator = () => {
             });
           }
         
-        const response = await fetch('http://localhost:8000/api/songs');
-        if (response.ok) {
-          const data = await response.json();
+        try {
+          const data = await songApi.getSongs();
           // Find the most recent song that matches our title AND was created after this request started
           const startCutoff = (requestStartEpoch || (Date.now() / 1000)) - 2; // 2s cushion
           const normalizedTitle = title.trim().toLowerCase();
@@ -306,6 +283,8 @@ export const SongGenerator = () => {
             });
             return;
           }
+        } catch (error) {
+          // Ignore polling errors, continue polling
         }
         
         if (attempts < maxAttempts) {

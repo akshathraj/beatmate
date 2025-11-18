@@ -2,9 +2,7 @@ import os
 import re
 from moviepy.editor import AudioFileClip
 from difflib import SequenceMatcher
-
-# AssemblyAI API Key (from your account)
-ASSEMBLYAI_API_KEY = "a05110f76ada463ba578240ff7dd0af1"
+from app import config
 
 def clean_word_for_matching(word):
     """
@@ -161,16 +159,16 @@ def align_with_assemblyai(audio_path, known_lyrics=None, original_lyrics_text=No
         print("[AssemblyAI] 🎯 Using AssemblyAI for word-level timestamps...")
         
         # Configure API
-        aai.settings.api_key = ASSEMBLYAI_API_KEY
+        aai.settings.api_key = config.ASSEMBLYAI_API_KEY
         
         # Configure transcription with word-level timestamps
-        config = aai.TranscriptionConfig(
+        transcription_config = aai.TranscriptionConfig(
             speech_model=aai.SpeechModel.best,  # Use best model for accuracy
         )
         
         # Transcribe
         print(f"[AssemblyAI] Transcribing: {audio_path}")
-        transcriber = aai.Transcriber(config=config)
+        transcriber = aai.Transcriber(config=transcription_config)
         transcript = transcriber.transcribe(audio_path)
         
         if transcript.status == aai.TranscriptStatus.error:

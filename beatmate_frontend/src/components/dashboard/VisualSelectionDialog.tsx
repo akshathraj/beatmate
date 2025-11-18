@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Image as ImageIcon, Upload, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { backgroundApi } from "@/lib/api";
 
 interface Background {
   filename: string;
@@ -30,8 +31,7 @@ export const VisualSelectionDialog = ({ open, onOpenChange, onSelect }: VisualSe
 
   const fetchBackgrounds = async () => {
     try {
-      const response = await fetch("http://localhost:8000/api/backgrounds");
-      const data = await response.json();
+      const data = await backgroundApi.getBackgrounds();
       setBackgrounds(data.backgrounds || []);
     } catch (error) {
       toast({
@@ -83,7 +83,7 @@ export const VisualSelectionDialog = ({ open, onOpenChange, onSelect }: VisualSe
                   }`}
                 >
                   <img
-                    src={`http://localhost:8000${bg.url}`}
+                    src={bg.url}
                     alt={bg.filename}
                     className="w-full h-full object-cover"
                   />
@@ -119,7 +119,7 @@ export const VisualSelectionDialog = ({ open, onOpenChange, onSelect }: VisualSe
                 <ImageIcon className="w-16 h-16 mx-auto mb-3 opacity-50" />
                 <p className="font-medium">No backgrounds available</p>
                 <p className="text-sm mt-1">
-                  Add bg1.jpg, bg2.jpg, and bg3.jpg to files/backgrounds/ folder
+                  Upload images to the 'backgrounds' bucket in Supabase Storage
                 </p>
               </div>
             )}

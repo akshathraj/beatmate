@@ -1,11 +1,27 @@
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { Link } from "react-router-dom";
-import { Menu, Home, Users, CreditCard, Music, UserCircle } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { Menu, Home, Users, CreditCard, Music, UserCircle, LogOut } from "lucide-react";
 import { useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 
 export const NavigationMenu = () => {
   const [open, setOpen] = useState(false);
+  const { signOut, user } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      toast.success("Signed out successfully!");
+      setOpen(false);
+      navigate("/");
+    } catch (error) {
+      console.error("Error signing out:", error);
+      toast.error("Failed to sign out");
+    }
+  };
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -91,6 +107,30 @@ export const NavigationMenu = () => {
               Create, share, and discover amazing music with AI
             </p>
           </div>
+
+          {/* User Info & Sign Out */}
+          {user && (
+            <div className="mt-4 pt-4 border-t border-border/20">
+              <div className="mb-3 px-4">
+                <p className="text-sm font-medium truncate">{user.email}</p>
+                <p className="text-xs text-muted-foreground">Signed in</p>
+              </div>
+              
+              <Button
+                onClick={handleSignOut}
+                variant="outline"
+                className="w-full justify-start gap-4 p-4 h-auto border-destructive/30 hover:bg-destructive/10 hover:border-destructive/50 text-destructive hover:text-destructive"
+              >
+                <div className="w-12 h-12 rounded-xl bg-destructive/10 flex items-center justify-center">
+                  <LogOut className="w-6 h-6" />
+                </div>
+                <div className="text-left">
+                  <h3 className="font-semibold text-lg">Sign Out</h3>
+                  <p className="text-sm opacity-70">End your session</p>
+                </div>
+              </Button>
+            </div>
+          )}
         </nav>
       </SheetContent>
     </Sheet>
