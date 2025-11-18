@@ -10,10 +10,16 @@ RUN apt-get update && \
     fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
-# Fix ImageMagick security policy for text rendering
-RUN sed -i 's/rights="none" pattern="TEXT"/rights="read|write" pattern="TEXT"/' /etc/ImageMagick-6/policy.xml && \
-    sed -i 's/rights="none" pattern="LABEL"/rights="read|write" pattern="LABEL"/' /etc/ImageMagick-6/policy.xml && \
-    sed -i 's/rights="none" pattern="@\*"/rights="read|write" pattern="@*"/' /etc/ImageMagick-6/policy.xml
+# Fix ImageMagick security policy (find the actual path and fix it)
+RUN POLICY_FILE=$(find /etc -name "policy.xml" 2>/dev/null | grep -i imagemagick | head -n 1) && \
+    if [ -n "$POLICY_FILE" ]; then \
+        sed -i 's/rights="none" pattern="TEXT"/rights="read|write" pattern="TEXT"/' "$POLICY_FILE" || true; \
+        sed -i 's/rights="none" pattern="LABEL"/rights="read|write" pattern="LABEL"/' "$POLICY_FILE" || true; \
+        sed -i 's/rights="none" pattern="@\*"/rights="read|write" pattern="@*"/' "$POLICY_FILE" || true; \
+        echo "ImageMagick policy updated at $POLICY_FILE"; \
+    else \
+        echo "ImageMagick policy file not found, skipping"; \
+    fi
 
 WORKDIR /app
 
