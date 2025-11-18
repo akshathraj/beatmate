@@ -9,7 +9,7 @@ const Hero = () => {
   const navigate = useNavigate();
   
   return (
-    <section className="relative min-h-screen flex items-center justify-center animated-bg overflow-hidden">
+    <section className="relative min-h-screen flex items-center justify-center animated-bg overflow-hidden pt-24 md:pt-0">
       {/* Animated background elements */}
       <div className="absolute inset-0 opacity-20">
         <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-primary/10 rounded-full blur-3xl animate-float"></div>
@@ -23,12 +23,12 @@ const Hero = () => {
         <div className="grid lg:grid-cols-2 gap-12 items-center">
           {/* Left Content */}
           <div className="text-center lg:text-left animate-fade-in">
-            <h1 className="text-5xl lg:text-7xl font-bold mb-6 leading-tight">
+            <h1 className="text-4xl sm:text-5xl lg:text-7xl font-bold mb-6 leading-tight">
               Turn Ideas into <span className="text-gradient">Music</span> with
               BeatMate
             </h1>
 
-            <p className="text-xl text-muted-foreground mb-8 max-w-2xl">
+            <p className="text-lg sm:text-xl text-muted-foreground mb-8 max-w-2xl mx-auto lg:mx-0">
               Write lyrics or describe a mood. BeatMate turns it into a song in
               seconds. Create, collaborate, and share your musical vision
               instantly.
@@ -37,20 +37,20 @@ const Hero = () => {
             <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
               {isAuthenticated ? (
                 <Button
-                  className="btn-hero text-lg px-8 py-4"
+                  className="btn-hero text-base sm:text-lg px-6 sm:px-8 py-3 sm:py-4"
                   onClick={() => navigate("/dashboard")}
                 >
                   Go to Dashboard
                 </Button>
               ) : (
                 <GoogleSignInButton
-                  className="btn-hero text-lg px-8 py-4"
+                  className="btn-hero text-base sm:text-lg px-6 sm:px-8 py-3 sm:py-4"
                   text="Get Started with Google"
                 />
               )}
               <Button
                 variant="outline"
-                className="btn-secondary text-lg px-8 py-4"
+                className="btn-secondary text-base sm:text-lg px-6 sm:px-8 py-3 sm:py-4"
                 onClick={() => {
                   document.getElementById("how-it-works")?.scrollIntoView({ behavior: "smooth" });
                 }}
