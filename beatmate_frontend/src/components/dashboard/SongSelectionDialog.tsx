@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Music, Upload, Play, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { songApi } from "@/lib/api";
 
 interface Song {
   filename: string;
@@ -34,8 +35,7 @@ export const SongSelectionDialog = ({ open, onOpenChange, onSelect }: SongSelect
 
   const fetchSongs = async () => {
     try {
-      const response = await fetch("http://localhost:8000/api/songs");
-      const data = await response.json();
+      const data = await songApi.getSongs();
       setSongs(data.songs || []);
     } catch (error) {
       toast({
@@ -105,7 +105,7 @@ export const SongSelectionDialog = ({ open, onOpenChange, onSelect }: SongSelect
                   <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center flex-shrink-0">
                     {song.album_art_url ? (
                       <img
-                        src={`http://localhost:8000${song.album_art_url}`}
+                        src={song.album_art_url}
                         alt={song.title}
                         className="w-full h-full object-cover rounded-lg"
                       />

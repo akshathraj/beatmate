@@ -1,18 +1,26 @@
-import { useState, useRef } from "react";
-import { Camera, Mail, Phone, User } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Camera, Mail, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 
 const ProfileHeader = () => {
-  const [name, setName] = useState("Alex Rivers");
-  const [email, setEmail] = useState("alex.rivers@musicai.io");
-  const [phone, setPhone] = useState("+1 (555) 123-4567");
+  const { user } = useAuth();
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [isEditingName, setIsEditingName] = useState(false);
-  const [isEditingEmail, setIsEditingEmail] = useState(false);
-  const [isEditingPhone, setIsEditingPhone] = useState(false);
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Load user data from Google authentication
+  useEffect(() => {
+    if (user) {
+      setName(user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || "User");
+      setEmail(user.email || "");
+      setProfilePhoto(user.user_metadata?.avatar_url || user.user_metadata?.picture || null);
+    }
+  }, [user]);
 
   const handlePhotoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -119,76 +127,12 @@ const ProfileHeader = () => {
             <div className="space-y-2 transition-all duration-300 hover:translate-x-1">
               <label className="text-sm text-muted-foreground flex items-center gap-2">
                 <Mail className="w-4 h-4 text-primary transition-transform duration-300 hover:scale-125 hover:-rotate-12" />
-                Email
+                Email (from Google)
               </label>
-              {isEditingEmail ? (
-                <div className="flex gap-2 animate-fade-in">
-                  <Input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="bg-secondary border-border/50 text-foreground focus:border-accent focus:ring-2 focus:ring-accent/20 transition-all"
-                    autoFocus
-                  />
-                  <Button
-                    onClick={() => {
-                      setIsEditingEmail(false);
-                      handleSave("Email");
-                    }}
-                    className="bg-primary hover:bg-primary/90 text-primary-foreground active:scale-95 transition-transform"
-                  >
-                    Save
-                  </Button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setIsEditingEmail(true)}
-                  className="text-foreground hover:text-primary transition-all duration-300 text-left group hover:translate-x-2"
-                >
-                  {email}
-                  <span className="ml-2 text-sm text-muted-foreground opacity-0 group-hover:opacity-100 transition-all duration-300 inline-block group-hover:scale-125">
-                    ✏️
-                  </span>
-                </button>
-              )}
-            </div>
-
-            {/* Phone */}
-            <div className="space-y-2 transition-all duration-300 hover:translate-x-1">
-              <label className="text-sm text-muted-foreground flex items-center gap-2">
-                <Phone className="w-4 h-4 text-accent transition-transform duration-300 hover:scale-125 hover:rotate-12" />
-                Phone (Optional)
-              </label>
-              {isEditingPhone ? (
-                <div className="flex gap-2 animate-fade-in">
-                  <Input
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    className="bg-secondary border-border/50 text-foreground focus:border-accent focus:ring-2 focus:ring-accent/20 transition-all"
-                    autoFocus
-                  />
-                  <Button
-                    onClick={() => {
-                      setIsEditingPhone(false);
-                      handleSave("Phone");
-                    }}
-                    className="bg-primary hover:bg-primary/90 text-primary-foreground active:scale-95 transition-transform"
-                  >
-                    Save
-                  </Button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setIsEditingPhone(true)}
-                  className="text-foreground hover:text-accent transition-all duration-300 text-left group hover:translate-x-2"
-                >
-                  {phone}
-                  <span className="ml-2 text-sm text-muted-foreground opacity-0 group-hover:opacity-100 transition-all duration-300 inline-block group-hover:scale-125">
-                    ✏️
-                  </span>
-                </button>
-              )}
+              <div className="text-foreground text-left">
+                {email}
+              </div>
+              <p className="text-xs text-muted-foreground">Email is managed by your Google account</p>
             </div>
           </div>
         </div>

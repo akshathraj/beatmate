@@ -1,10 +1,13 @@
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import SignupModal from "./SignupModal";
+import { GoogleSignInButton } from "@/components/auth/GoogleSignInButton";
+import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
 import heroMockup from "@/assets/hero-mockup.jpg";
 
 const Hero = () => {
-  const [isSignupOpen, setIsSignupOpen] = useState(false);
+  const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+  
   return (
     <section className="relative min-h-screen flex items-center justify-center animated-bg overflow-hidden">
       {/* Animated background elements */}
@@ -32,15 +35,25 @@ const Hero = () => {
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-              <Button
-                className="btn-hero text-lg px-8 py-4"
-                onClick={() => setIsSignupOpen(true)}
-              >
-                Get Started Free
-              </Button>
+              {isAuthenticated ? (
+                <Button
+                  className="btn-hero text-lg px-8 py-4"
+                  onClick={() => navigate("/dashboard")}
+                >
+                  Go to Dashboard
+                </Button>
+              ) : (
+                <GoogleSignInButton
+                  className="btn-hero text-lg px-8 py-4"
+                  text="Get Started with Google"
+                />
+              )}
               <Button
                 variant="outline"
                 className="btn-secondary text-lg px-8 py-4"
+                onClick={() => {
+                  document.getElementById("how-it-works")?.scrollIntoView({ behavior: "smooth" });
+                }}
               >
                 Watch Demo
               </Button>
@@ -102,12 +115,6 @@ const Hero = () => {
           <div className="w-1 h-3 bg-muted-foreground rounded-full mt-2"></div>
         </div>
       </div>
-
-      {/* Signup Modal */}
-      <SignupModal
-        isOpen={isSignupOpen}
-        onClose={() => setIsSignupOpen(false)}
-      />
     </section>
   );
 };

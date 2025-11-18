@@ -1,14 +1,15 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import LoginModal from "./LoginModal";
-import SignupModal from "./SignupModal";
+import { GoogleSignInButton } from "@/components/auth/GoogleSignInButton";
+import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
 import OurTeamModal from "./OurTeamModal";
 
 const LandingHeader = () => {
   const [isScrolled, setIsScrolled] = useState(false);
-  const [isLoginOpen, setIsLoginOpen] = useState(false);
-  const [isSignupOpen, setIsSignupOpen] = useState(false);
   const [isTeamOpen, setIsTeamOpen] = useState(false);
+  const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -66,26 +67,24 @@ const LandingHeader = () => {
           </nav>
 
           <div className="flex items-center space-x-4">
-            <Button 
-              variant="ghost" 
-              className="text-muted-foreground hover:text-foreground"
-              onClick={() => setIsLoginOpen(true)}
-            >
-              Login
-            </Button>
-            <Button 
-              className="btn-hero"
-              onClick={() => setIsSignupOpen(true)}
-            >
-              Sign Up Free
-            </Button>
+            {isAuthenticated ? (
+              <Button 
+                className="btn-hero"
+                onClick={() => navigate("/dashboard")}
+              >
+                Go to Dashboard
+              </Button>
+            ) : (
+              <GoogleSignInButton 
+                className="btn-hero"
+                text="Sign in with Google"
+              />
+            )}
           </div>
         </div>
       </div>
 
       {/* Modals */}
-      <LoginModal isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} />
-      <SignupModal isOpen={isSignupOpen} onClose={() => setIsSignupOpen(false)} />
       <OurTeamModal isOpen={isTeamOpen} onClose={() => setIsTeamOpen(false)} />
     </header>
   );

@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { songApi } from "@/lib/api";
 
 const genres = [
   "Pop", "Hip Hop", "EDM", "Romantic", "Lofi", "Patriotic", "Acoustic", "Rock", "Jazz", "Classical", "Country", "Alternative", "R&B", "Custom"
@@ -43,9 +44,7 @@ export const RemixSongs = () => {
   const fetchSongs = async () => {
     try {
       setIsLoading(true);
-      const res = await fetch('http://localhost:8000/api/songs');
-      if (!res.ok) return;
-      const data = await res.json();
+      const data = await songApi.getSongs();
       setSongs((data?.songs || []) as BackendSong[]);
     } catch (e) {
       // ignore
@@ -140,13 +139,7 @@ export const RemixSongs = () => {
           lastToastTime = elapsed;
         }
 
-        const res = await fetch('http://localhost:8000/api/songs');
-        if (!res.ok) {
-          pollIntervalRef.current = window.setTimeout(checkRemix, POLL_INTERVAL);
-          return;
-        }
-
-        const data = await res.json();
+        const data = await songApi.getSongs();
         const allSongs = (data?.songs || []) as BackendSong[];
         const foundSong = allSongs.find((s) => (s.title || s.filename).includes(songTitle));
 
@@ -253,34 +246,13 @@ export const RemixSongs = () => {
       });
 
       // Call backend remix endpoint to create new lyrics and generate a new song
-      const response = await fetch('http://localhost:8000/api/remix', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          song_a: sA.filename,
-          song_b: sB.filename,
-          title: title.trim(),
-          genre: genre === "custom" ? customGenre : genre,
-          voiceType: voiceType
-        })
+      await songApi.remixSongs({
+        song_a: sA.filename,
+        song_b: sB.filename,
+        title: title.trim(),
+        genre: genre === "custom" ? customGenre : genre,
+        voiceType: voiceType
       });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        const errorDetail = errorData.detail || `HTTP ${response.status}`;
-        console.error('❌ Remix generation failed:', errorDetail);
-        
-        toast({
-          title: "❌ Generation Failed",
-          description: errorDetail,
-          variant: "destructive",
-          duration: 5000,
-        });
-        setIsGenerating(false);
-        return;
-      }
-
-      const result = await response.json();
 
       toast({
         title: "✅ Lyrics Generated",
@@ -291,7 +263,6 @@ export const RemixSongs = () => {
       pollForRemix(title);
 
     } catch (error: any) {
-      console.error('❌ Remix error:', error);
       toast({
         title: "❌ Error",
         description: error.message || "Failed to generate remix",

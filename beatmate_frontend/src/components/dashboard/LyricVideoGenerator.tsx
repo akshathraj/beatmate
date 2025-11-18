@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { DashboardCard } from "./DashboardCard";
 import { SongSelectionDialog } from "./SongSelectionDialog";
 import { VisualSelectionDialog } from "./VisualSelectionDialog";
+import { videoApi } from "@/lib/api";
 
 export const LyricVideoGenerator = () => {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -58,12 +59,7 @@ export const LyricVideoGenerator = () => {
       formData.append("song_filename", selectedSong);
       formData.append("background_filename", selectedBackground);
 
-      const response = await fetch("http://localhost:8000/api/generate-lyric-video", {
-        method: "POST",
-        body: formData,
-      });
-
-      const data = await response.json();
+      const data = await videoApi.generateLyricVideo(formData);
 
       if (data.status === "success") {
         setVideoUrl(`http://localhost:8000${data.video_url}`);
