@@ -16,7 +16,7 @@ numpy>=1.24.0
 # ---- Video Processing ----
 moviepy==1.0.3
 cython>=3.0.10
-pillow>=10.3.0
+pillow==9.5.0
 imageio>=2.34.0
 imageio-ffmpeg>=0.5.1
 scipy>=1.12.0
