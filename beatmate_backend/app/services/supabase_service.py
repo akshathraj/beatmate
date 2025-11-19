@@ -46,6 +46,10 @@ class SupabaseService:
             if content_type:
                 options['content-type'] = content_type
             
+            # Only allow overwriting for lyrics (to handle retry scenarios)
+            if bucket == 'user-lyrics':
+                options['upsert'] = 'true'
+            
             result = self.client.storage.from_(bucket).upload(
                 file_path,
                 file_content,
