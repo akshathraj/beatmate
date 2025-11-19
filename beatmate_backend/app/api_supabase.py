@@ -55,9 +55,21 @@ async def generate_song(
         )
         
         # Generate song (async task with MusicGPT)
-        music_task = song_service.generate_song_from_lyrics(
-            complete_lyrics, req.genre, title=req.title, voice_type=req.voiceType
-        )
+        try:
+            music_task = song_service.generate_song_from_lyrics(
+                complete_lyrics, req.genre, title=req.title, voice_type=req.voiceType
+            )
+        except Exception as musicgpt_error:
+            # If MusicGPT fails, cleanup the uploaded lyrics
+            print(f"❌ MusicGPT failed, cleaning up lyrics: {musicgpt_error}")
+            try:
+                supabase_service = get_supabase_service()
+                lyrics_path = f"{user.user_id}/{lyrics_filename}"
+                supabase_service.client.storage.from_("user-lyrics").remove([lyrics_path])
+                print(f"✅ Cleaned up orphaned lyrics: {lyrics_path}")
+            except Exception as cleanup_error:
+                print(f"⚠️ Could not cleanup lyrics: {cleanup_error}")
+            raise HTTPException(status_code=500, detail=f"MusicGPT generation failed: {str(musicgpt_error)}")
         
         # Persist metadata in temp folder for webhook lookup
         try:
@@ -121,10 +133,34 @@ async def musicgpt_webhook(request: Request):
             failure_reason = payload.get("reason", "Unknown error")
             print(f"   Reason: {failure_reason}")
             
-            # Cleanup temp metadata
+            # Cleanup temp metadata and lyrics
             task_id = payload.get('task_id')
             if task_id:
                 temp_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'temp')
+                meta_path = os.path.join(temp_dir, f"task_{task_id}.meta.json")
+                
+                # Read metadata to get user_id and title for lyrics cleanup
+                if os.path.exists(meta_path):
+                    try:
+                        with open(meta_path, 'r') as f:
+                            metadata = json.load(f)
+                        user_id = metadata.get('user_id')
+                        title = metadata.get('title', 'song')
+                        
+                        # Delete orphaned lyrics from Supabase
+                        if user_id and title:
+                            try:
+                                supabase_service = get_supabase_service()
+                                safe_title = supabase_storage.sanitize_title(title)
+                                lyrics_path = f"{user_id}/{safe_title}.txt"
+                                supabase_service.client.storage.from_("user-lyrics").remove([lyrics_path])
+                                print(f"✅ Cleaned up orphaned lyrics: {lyrics_path}")
+                            except Exception as cleanup_error:
+                                print(f"⚠️ Could not cleanup lyrics: {cleanup_error}")
+                    except Exception as e:
+                        print(f"⚠️ Could not read metadata for cleanup: {e}")
+                
+                # Delete metadata files
                 for meta_file in [f"task_{task_id}.meta.json", f"task_{task_id}.user.txt"]:
                     meta_path = os.path.join(temp_dir, meta_file)
                     if os.path.exists(meta_path):

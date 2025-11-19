@@ -10,6 +10,91 @@ def clean_word_for_matching(word):
     """
     return re.sub(r'[^\w\s]', '', word.lower()).strip()
 
+def detect_language_from_lyrics(lyrics_text):
+    """
+    Detect language from lyrics using Gemini AI.
+    Works with any script (Romanized Hindi, native scripts, multilingual, etc.)
+    
+    Returns ISO 639-1 language code (e.g., 'hi', 'en', 'es', 'ar') or None
+    """
+    if not lyrics_text:
+        return None
+    
+    try:
+        from google import genai
+        
+        # Initialize Gemini client
+        client = genai.Client(api_key=config.GEMINI_API_KEY)
+        
+        # Take first 300 characters (enough for detection, saves tokens)
+        sample = lyrics_text[:300].strip()
+        
+        prompt = f"""Detect the PRIMARY language of these lyrics and return ONLY the ISO 639-1 language code.
+
+Lyrics sample:
+{sample}
+
+Common codes: hi (Hindi), en (English), es (Spanish), ar (Arabic), fr (French), de (German), it (Italian), pt (Portuguese), ja (Japanese), ko (Korean), zh (Chinese)
+
+Rules:
+- If lyrics are Romanized (e.g., "Tere Naam" instead of "तेरे नाम"), still detect the original language
+- If multilingual, return the DOMINANT language
+- Return ONLY the 2-letter code, nothing else
+
+Output (2-letter code only):"""
+
+        # Call Gemini with minimal response
+        response = client.models.generate_content(
+            model="gemini-2.5-flash-lite",
+            contents=prompt
+        )
+        
+        # Parse response
+        detected_code = response.text.strip().lower()
+        
+        # Validate it's a 2-letter code
+        if len(detected_code) == 2 and detected_code.isalpha():
+            print(f"[Language Detection] ✅ Detected via Gemini: {detected_code}")
+            return detected_code
+        else:
+            print(f"[Language Detection] ⚠️ Invalid response: {detected_code}")
+            return None
+            
+    except Exception as e:
+        print(f"[Language Detection] ❌ Error: {e}")
+        return None
+
+def romanize_text(text: str, language_code: str) -> str:
+    """
+    Romanize non-Latin text to Latin alphabets.
+    
+    Args:
+        text: Text in native script (e.g., Devanagari, Arabic)
+        language_code: Language code (e.g., "hi", "ar")
+    
+    Returns:
+        Romanized text in Latin alphabets
+    """
+    try:
+        # Hindi (Devanagari) → Roman (ITRANS)
+        if language_code == 'hi':
+            try:
+                from indic_transliteration import sanscript
+                from indic_transliteration.sanscript import transliterate
+                return transliterate(text, sanscript.DEVANAGARI, sanscript.ITRANS)
+            except ImportError:
+                print(f"[Romanization] ⚠️ indic_transliteration not installed for Hindi")
+                return text
+        
+        # For other non-Latin languages, return as-is for now
+        # Can add more transliteration libraries as needed
+        else:
+            return text
+            
+    except Exception as e:
+        print(f"[Romanization] ⚠️ Error romanizing {language_code}: {e}")
+        return text
+
 def map_transcription_to_lyrics(transcribed_words, original_lyrics):
     """
     Map AssemblyAI transcribed words (with timing) to original lyrics (with formatting).
@@ -148,8 +233,10 @@ def align_with_assemblyai(audio_path, known_lyrics=None, original_lyrics_text=No
     Use AssemblyAI to get word-level timestamps from audio.
     
     Strategy:
-    - Get accurate timing from AssemblyAI transcription
-    - If original_lyrics_text provided, map timing to original formatted words
+    - Detect language from lyrics (Gemini AI)
+    - Tell Assembly AI the language for accurate transcription
+    - Romanize transcription if non-Latin script
+    - Map timing to original formatted words
     
     Returns list of {"start": float, "end": float, "word": "..."}.
     """
@@ -161,13 +248,25 @@ def align_with_assemblyai(audio_path, known_lyrics=None, original_lyrics_text=No
         # Configure API
         aai.settings.api_key = config.ASSEMBLYAI_API_KEY
         
+        # Detect language from lyrics to help Assembly AI
+        detected_lang = None
+        if original_lyrics_text:
+            detected_lang = detect_language_from_lyrics(original_lyrics_text)
+            if detected_lang:
+                print(f"[AssemblyAI] 🌐 Language hint for Assembly AI: {detected_lang}")
+        
         # Configure transcription with word-level timestamps
         transcription_config = aai.TranscriptionConfig(
             speech_model=aai.SpeechModel.best,  # Use best model for accuracy
+            language_code=detected_lang if detected_lang else None,  # Language hint
         )
         
         # Transcribe
         print(f"[AssemblyAI] Transcribing: {audio_path}")
+        if detected_lang:
+            print(f"[AssemblyAI] Using language code: {detected_lang}")
+        else:
+            print(f"[AssemblyAI] Auto-detecting language...")
         transcriber = aai.Transcriber(config=transcription_config)
         transcript = transcriber.transcribe(audio_path)
         
@@ -187,13 +286,27 @@ def align_with_assemblyai(audio_path, known_lyrics=None, original_lyrics_text=No
             
             print(f"[AssemblyAI] ✅ Got {len(word_fragments)} word timestamps from transcription")
             
-            # NEW: If we have original lyrics, map timing to original words
+            # Romanize transcription if non-Latin script
+            if detected_lang and detected_lang in ['hi', 'ar', 'ja', 'zh', 'ko', 'ru', 'th']:
+                print(f"[AssemblyAI] 🔄 Romanizing {detected_lang} transcription to Latin script...")
+                for word_obj in word_fragments:
+                    word_obj['word'] = romanize_text(word_obj['word'], detected_lang)
+                print(f"[AssemblyAI] ✅ Romanization complete")
+            
+            # Map timing to original lyrics
             if original_lyrics_text:
                 print(f"[AssemblyAI] 📝 Mapping to original lyrics (preserving formatting)...")
                 word_fragments = map_transcription_to_lyrics(word_fragments, original_lyrics_text)
                 print(f"[AssemblyAI] ✅ Using original formatted lyrics with AssemblyAI timing!")
             else:
                 print(f"[AssemblyAI] Using AssemblyAI transcription as-is")
+            
+            # Apply timing offset to fix sync delay (Assembly AI tends to be ~2-3s late)
+            TIMING_OFFSET = -1.5  # Negative = lyrics appear earlier
+            print(f"[AssemblyAI] ⏱️  Applying timing offset: {TIMING_OFFSET}s for better sync")
+            for fragment in word_fragments:
+                fragment['start'] = max(0, fragment['start'] + TIMING_OFFSET)
+                fragment['end'] = max(0, fragment['end'] + TIMING_OFFSET)
             
             return word_fragments
         else:
